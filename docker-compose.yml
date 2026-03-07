@@ -29,6 +29,7 @@ services:
     build:
       context: .
       dockerfile: services/asr/Dockerfile
+    runtime: ${ASR_CONTAINER_RUNTIME:-nvidia}
     env_file: .env
     environment:
       SERVICE_NAME: asr
@@ -46,6 +47,7 @@ services:
       ASR_GPU_IDS: ${ASR_GPU_IDS:-1}
       NVIDIA_VISIBLE_DEVICES: ${ASR_GPU_IDS:-1}
       CUDA_VISIBLE_DEVICES: ${ASR_GPU_IDS:-1}
+      NVIDIA_DRIVER_CAPABILITIES: ${ASR_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${ASR_PORT}:${ASR_PORT}"
     depends_on:
