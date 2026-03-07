@@ -1,0 +1,301 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+  font-family: "Space Grotesk", sans-serif;
+  color: #f4efe5;
+  background:
+    radial-gradient(circle at top left, rgba(255, 127, 80, 0.2), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(53, 140, 212, 0.18), transparent 30%),
+    #0f1219;
+  --panel: rgba(17, 22, 31, 0.88);
+  --panel-strong: rgba(24, 31, 44, 0.94);
+  --border: rgba(240, 230, 214, 0.12);
+  --accent: #f97352;
+  --accent-cool: #56b9ff;
+  --good: #78d38d;
+  --warn: #f4b942;
+  --danger: #ff6c61;
+  --muted: #9ca6b6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: inherit;
+}
+
+a, button {
+  font: inherit;
+}
+
+button, input, textarea, select {
+  font: inherit;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 0.9rem 1rem;
+}
+
+button {
+  background: linear-gradient(135deg, var(--accent), #ffb36c);
+  color: #13161d;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border: 1px solid var(--border);
+}
+
+textarea, input, select, pre {
+  width: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 2rem 1.25rem;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+  backdrop-filter: blur(20px);
+}
+
+.brand p {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.brand span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.nav-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.nav-card {
+  text-decoration: none;
+  color: inherit;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-card.active {
+  background: linear-gradient(135deg, rgba(249, 115, 82, 0.18), rgba(86, 185, 255, 0.12));
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.content {
+  padding: 2rem;
+}
+
+.page-grid, .split-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.split-grid {
+  grid-template-columns: minmax(280px, 360px) 1fr;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+.panel-header h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.35rem;
+}
+
+.eyebrow, .label, .muted {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.83rem;
+  letter-spacing: 0.04em;
+}
+
+.stat-grid, .cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card, .mini-card, .model-card {
+  border-radius: 22px;
+  padding: 1rem;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+}
+
+.stat-card strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 1.6rem;
+}
+
+.stat-card.good strong {
+  color: var(--good);
+}
+
+.stat-card.danger strong {
+  color: var(--danger);
+}
+
+.toolbar, .stack {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.stack {
+  flex-direction: column;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.badge.good {
+  background: rgba(120, 211, 141, 0.18);
+}
+
+.badge.warn {
+  background: rgba(244, 185, 66, 0.18);
+}
+
+.badge.danger {
+  background: rgba(255, 108, 97, 0.18);
+}
+
+.transcript-pane, .list-table {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.button-row {
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border: 1px solid var(--border);
+}
+
+.response-box {
+  overflow: auto;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(4, 7, 12, 0.65);
+  border: 1px solid var(--border);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.waveform {
+  display: flex;
+  align-items: end;
+  gap: 0.4rem;
+  height: 120px;
+  padding: 1rem;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(86, 185, 255, 0.08), rgba(249, 115, 82, 0.06));
+}
+
+.waveform span {
+  width: 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent-cool), var(--accent));
+}
+
+.triage-card {
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+.metric-bars {
+  display: grid;
+  gap: 1rem;
+}
+
+.metric-track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.metric-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-cool), var(--accent));
+}
+
+.error-text {
+  color: var(--danger);
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content {
+    padding: 1rem;
+  }
+}

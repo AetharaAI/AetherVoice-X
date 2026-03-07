@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: gateway
+    static_configs:
+      - targets: ["gateway:8080"]
+    metrics_path: /metrics
+
+  - job_name: asr
+    static_configs:
+      - targets: ["asr:8090"]
+    metrics_path: /metrics
+
+  - job_name: tts
+    static_configs:
+      - targets: ["tts:8091"]
+    metrics_path: /metrics

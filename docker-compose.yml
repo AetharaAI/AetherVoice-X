@@ -1,0 +1,178 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: gateway
+      PYTHONPATH: /app/services/worker-common:/app/services/gateway
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    depends_on:
+      - asr
+      - tts
+      - redis
+      - postgres
+      - minio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+
+  asr:
+    build:
+      context: .
+      dockerfile: services/asr/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: asr
+      PYTHONPATH: /app/services/worker-common:/app/services/asr
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
+      FASTER_WHISPER_MODEL_PATH: ${FASTER_WHISPER_MODEL_PATH}
+      VOXTRAL_MODEL_PATH: ${VOXTRAL_MODEL_PATH}
+      QWEN3_ASR_MODEL_PATH: ${QWEN3_ASR_MODEL_PATH}
+      ASR_DEVICE: ${ASR_DEVICE:-cpu}
+      ASR_COMPUTE_TYPE: ${ASR_COMPUTE_TYPE:-int8}
+      ASR_GPU_IDS: ${ASR_GPU_IDS:-1}
+      NVIDIA_VISIBLE_DEVICES: ${ASR_GPU_IDS:-1}
+      CUDA_VISIBLE_DEVICES: ${ASR_GPU_IDS:-1}
+    ports:
+      - "${ASR_PORT}:${ASR_PORT}"
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${ASR_GPU_IDS:-1}"]
+              capabilities: [gpu]
+
+  tts:
+    build:
+      context: .
+      dockerfile: services/tts/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: tts
+      PYTHONPATH: /app/services/worker-common:/app/services/tts
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
+      MOSS_MODEL_PATH: ${MOSS_MODEL_PATH}
+      CHATTERBOX_BASE_URL: ${CHATTERBOX_BASE_URL}
+    ports:
+      - "${TTS_PORT}:${TTS_PORT}"
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+    env_file: .env
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-}
+      VITE_DEV_PROXY_TARGET: ${VITE_DEV_PROXY_TARGET:-}
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    depends_on:
+      - gateway
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: aether_voice
+      POSTGRES_USER: voice
+      POSTGRES_PASSWORD: voice
+    volumes:
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  prometheus:
+    image: prom/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+      - asr
+      - tts
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+
+  nginx:
+    image: nginx:1.27
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/sites/aether-voice.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - gateway
+      - frontend
+
+volumes:
+  postgres-data:
+  minio-data:

@@ -1,0 +1,6 @@
+.env*
+!.env.example
+services/frontend/node_modules/
+services/frontend/dist/
+__pycache__/
+.pytest_cache/
