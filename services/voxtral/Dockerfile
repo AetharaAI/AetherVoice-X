@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai:latest
+FROM vllm/vllm-openai:nightly
 
 RUN python3 -m pip install --no-cache-dir --upgrade --pre "vllm[audio]" \
     --extra-index-url https://wheels.vllm.ai/nightly \

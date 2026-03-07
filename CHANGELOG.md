@@ -23,3 +23,7 @@
   - live UI now asks for microphone permission before opening the websocket and shows the actual route used / fallback state
   - structured JSON logs now include dynamic extra fields so upstream URLs, readiness state, and error details are visible
   - Voxtral sidecar command now includes the Mistral-specific vLLM flags (`--tokenizer-mode mistral`, `--config-format mistral`, `--load-format mistral`)
+- Updated the Voxtral sidecar to match the current vLLM container contract:
+  - the container now starts with the model path as the command root instead of `sh -lc 'vllm serve ...'`
+  - the Voxtral image now builds from `vllm/vllm-openai:nightly`
+  - added env knobs for vLLM worker, logging, uvicorn log level, and API key to match the standalone model-runner pattern

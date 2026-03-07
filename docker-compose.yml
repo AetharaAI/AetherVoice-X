@@ -80,25 +80,29 @@ services:
       HF_HOME: ${HF_HOME}
       HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
       TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      VLLM_WORKER_MULTIPROC_METHOD: ${VOXTRAL_VLLM_WORKER_MULTIPROC_METHOD:-spawn}
+      VLLM_LOGGING_LEVEL: ${VOXTRAL_VLLM_LOGGING_LEVEL:-INFO}
       NVIDIA_VISIBLE_DEVICES: ${VOXTRAL_GPU_IDS:-2}
       NVIDIA_DRIVER_CAPABILITIES: ${VOXTRAL_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
       VLLM_DISABLE_COMPILE_CACHE: ${VOXTRAL_DISABLE_COMPILE_CACHE:-1}
       VLLM_USE_V1: 1
-    command:
-      - sh
-      - -lc
-      - >-
-        vllm serve ${VOXTRAL_MODEL_PATH}
-        --host 0.0.0.0
-        --port ${VOXTRAL_UPSTREAM_PORT:-8000}
-        --served-model-name ${VOXTRAL_REALTIME_MODEL_NAME:-mistralai/Voxtral-Mini-4B-Realtime-2602}
-        --tokenizer-mode mistral
-        --config-format mistral
-        --load-format mistral
-        --enforce-eager
-        --gpu-memory-utilization ${VOXTRAL_GPU_MEMORY_UTILIZATION:-0.85}
-        --max-model-len ${VOXTRAL_MAX_MODEL_LEN:-8192}
-        --compilation_config '{"cudagraph_mode":"PIECEWISE"}'
+    command: >
+      ${VOXTRAL_MODEL_PATH}
+      --host 0.0.0.0
+      --port ${VOXTRAL_UPSTREAM_PORT:-8000}
+      --served-model-name ${VOXTRAL_REALTIME_MODEL_NAME:-mistralai/Voxtral-Mini-4B-Realtime-2602}
+      --trust-remote-code
+      --tokenizer-mode mistral
+      --config-format mistral
+      --load-format mistral
+      --dtype auto
+      --generation-config vllm
+      --enforce-eager
+      --gpu-memory-utilization ${VOXTRAL_GPU_MEMORY_UTILIZATION:-0.85}
+      --max-model-len ${VOXTRAL_MAX_MODEL_LEN:-8192}
+      --api-key ${VOXTRAL_API_KEY:-EMPTY}
+      --uvicorn-log-level ${VOXTRAL_UVICORN_LOG_LEVEL:-info}
+      --compilation_config '{"cudagraph_mode":"PIECEWISE"}'
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${VOXTRAL_HOST_PORT:-8012}:${VOXTRAL_UPSTREAM_PORT:-8000}"
     extra_hosts:

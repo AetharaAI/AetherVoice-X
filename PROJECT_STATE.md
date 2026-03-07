@@ -25,6 +25,7 @@
   - now targets a vLLM realtime websocket upstream when configured
   - not marked ready until `VOXTRAL_REALTIME_BASE_URL` and `VOXTRAL_REALTIME_WS_URL` are configured
   - explicit selection should now fail loudly instead of silently falling back
+  - compose/runtime was updated to the current vLLM container entrypoint pattern where the command begins with the model path instead of wrapping `vllm serve`
 - `moss_realtime`
   - still scaffolded
 
@@ -46,6 +47,9 @@
    - `VOXTRAL_REALTIME_WS_URL`
    - `VOXTRAL_REALTIME_MODEL_NAME`
    - `VOXTRAL_REALTIME_API_KEY` if required
+   - `VOXTRAL_VLLM_WORKER_MULTIPROC_METHOD`
+   - `VOXTRAL_VLLM_LOGGING_LEVEL`
+   - `VOXTRAL_UVICORN_LOG_LEVEL`
 2. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
 3. Record timing notes for:
    - first partial latency
