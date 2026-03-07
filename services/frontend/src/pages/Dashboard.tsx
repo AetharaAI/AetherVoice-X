@@ -10,13 +10,29 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchHealth(), fetchModels(), fetchSessions()])
-      .then(([healthPayload, modelPayload, sessionPayload]) => {
-        setHealth(healthPayload);
-        setModels(modelPayload);
-        setSessions(sessionPayload);
-      })
-      .catch((err: Error) => setError(err.message));
+    Promise.allSettled([fetchHealth(), fetchModels(), fetchSessions()]).then(([healthResult, modelsResult, sessionsResult]) => {
+      const errors: string[] = [];
+
+      if (healthResult.status === "fulfilled") {
+        setHealth(healthResult.value);
+      } else {
+        errors.push(`health: ${healthResult.reason instanceof Error ? healthResult.reason.message : String(healthResult.reason)}`);
+      }
+
+      if (modelsResult.status === "fulfilled") {
+        setModels(modelsResult.value);
+      } else {
+        errors.push(`models: ${modelsResult.reason instanceof Error ? modelsResult.reason.message : String(modelsResult.reason)}`);
+      }
+
+      if (sessionsResult.status === "fulfilled") {
+        setSessions(sessionsResult.value);
+      } else {
+        errors.push(`sessions: ${sessionsResult.reason instanceof Error ? sessionsResult.reason.message : String(sessionsResult.reason)}`);
+      }
+
+      setError(errors.length ? errors.join(" | ") : null);
+    });
   }, [setHealth, setModels, setSessions]);
 
   const degradedDeps = Object.values(health?.dependencies ?? {}).filter((value) => value !== "ok").length;

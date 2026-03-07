@@ -160,7 +160,7 @@ class SessionService:
             query += " WHERE status = %(status)s"
             params["status"] = status
         query += " ORDER BY started_at DESC LIMIT %(limit)s"
-        return await self.db.fetch_all(query, params)
+        return [self._normalize_session_row(row) for row in await self.db.fetch_all(query, params)]
 
     async def get_session_detail(self, session_id: str) -> dict[str, Any] | None:
         session = await self.db.fetch_one(
@@ -173,6 +173,7 @@ class SessionService:
         )
         if session is None:
             return None
+        session = self._normalize_session_row(session)
         requests = await self.db.fetch_all("SELECT * FROM voice_requests WHERE session_id = %(session_id)s ORDER BY created_at DESC", {"session_id": session_id})
         transcripts = await self.db.fetch_all("SELECT * FROM transcripts WHERE session_id = %(session_id)s ORDER BY created_at DESC", {"session_id": session_id})
         triage_results = await self.db.fetch_all("SELECT * FROM triage_results WHERE session_id = %(session_id)s ORDER BY created_at DESC", {"session_id": session_id})
@@ -195,3 +196,13 @@ class SessionService:
             {"id": session_id, "ended_at": datetime.now(timezone.utc)},
         )
         await self.redis.hset(f"voice:session:{session_id}:meta", mapping={"status": "ended", "ended_at": datetime.now(timezone.utc).isoformat()})
+
+    def _normalize_session_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        tenant_id = normalized.get("tenant_id")
+        if tenant_id is not None:
+            normalized["tenant_id"] = str(tenant_id)
+        metadata = normalized.get("metadata")
+        if metadata is None:
+            normalized["metadata"] = {}
+        return normalized
