@@ -10,5 +10,6 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY . /app
 
 ENV PYTHONPATH=/app/services/worker-common:/app/services/asr
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}
 
 CMD ["sh", "-lc", "uvicorn app.main:app --host ${ASR_HOST:-0.0.0.0} --port ${ASR_PORT:-8090}"]
