@@ -36,6 +36,7 @@ Optional for fully working adapters:
 
 - A reachable Chatterbox-compatible HTTP service for TTS
 - GPU runtime if you want production-grade `faster-whisper` throughput
+- An OpenAI-compatible Voxtral upstream if you want the dedicated live ASR lane
 
 ## Quick start
 
@@ -99,7 +100,7 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 
 - `faster_whisper`: implemented for file transcription and used for streaming fallback
 - `chatterbox`: implemented as an HTTP passthrough adapter
-- `voxtral_realtime`: scaffold
+- `voxtral_realtime`: implemented as an upstream-backed low-latency live ASR lane when `VOXTRAL_REALTIME_BASE_URL` is configured
 - `qwen3_asr`: scaffold
 - `moss_realtime`: scaffold
 - `sentinel`: rule-based scaffold for domain triage
@@ -107,5 +108,6 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 
 ## Development notes
 
-- Advanced model integrations are intentionally marked as scaffolds instead of fake implementations.
+- The first Voxtral live integration uses repeated low-latency transcription refreshes against an OpenAI-compatible upstream while keeping the current websocket contract stable.
+- You can launch a local Voxtral sidecar with `docker compose --profile voxtral up -d voxtral` and then set `VOXTRAL_REALTIME_BASE_URL=http://voxtral:8000`.
 - The public API surface stays stable while model backends evolve behind adapters and routing policy.

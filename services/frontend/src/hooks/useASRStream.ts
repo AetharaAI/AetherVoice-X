@@ -19,12 +19,17 @@ export function useASRStream() {
   const [partials, setPartials] = useState<string[]>([]);
   const [finalText, setFinalText] = useState("");
   const [latencyLabel, setLatencyLabel] = useState("idle");
+  const [firstPartialMs, setFirstPartialMs] = useState<number | null>(null);
+  const [finalMs, setFinalMs] = useState<number | null>(null);
+  const [framesSent, setFramesSent] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sequenceRef = useRef(0);
+  const startedAtRef = useRef<number | null>(null);
+  const firstPartialRecordedRef = useRef(false);
 
   useEffect(() => () => void stop(), []);
 
@@ -34,6 +39,13 @@ export function useASRStream() {
       setSessionId(null);
       setPartials([]);
       setFinalText("");
+      setFirstPartialMs(null);
+      setFinalMs(null);
+      setFramesSent(0);
+      setLatencyLabel("connecting");
+      sequenceRef.current = 0;
+      startedAtRef.current = Date.now();
+      firstPartialRecordedRef.current = false;
       const streamSession = await startASRStream({
         model,
         language: "auto",
@@ -51,10 +63,17 @@ export function useASRStream() {
         if (payload.type === "partial_transcript" && payload.text) {
           setPartials((current) => [...current.slice(-4), payload.text as string]);
           setLatencyLabel("partial");
+          if (startedAtRef.current && !firstPartialRecordedRef.current) {
+            firstPartialRecordedRef.current = true;
+            setFirstPartialMs(Date.now() - startedAtRef.current);
+          }
         }
         if (payload.type === "final_transcript" && payload.text) {
           setFinalText(payload.text);
           setLatencyLabel("final");
+          if (startedAtRef.current) {
+            setFinalMs(Date.now() - startedAtRef.current);
+          }
         }
       };
       socket.onerror = () => setError("WebSocket stream failed");
@@ -68,6 +87,7 @@ export function useASRStream() {
         processorRef.current = processor;
         processor.onaudioprocess = (evt) => {
           sequenceRef.current += 1;
+          setFramesSent(sequenceRef.current);
           const input = evt.inputBuffer.getChannelData(0);
           socket.send(
             JSON.stringify({
@@ -102,9 +122,8 @@ export function useASRStream() {
     contextRef.current = null;
     mediaRef.current = null;
     socketRef.current = null;
-    setSessionId(null);
     setConnected(false);
   }
 
-  return { connected, sessionId, partials, finalText, latencyLabel, error, start, stop };
+  return { connected, sessionId, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
 }

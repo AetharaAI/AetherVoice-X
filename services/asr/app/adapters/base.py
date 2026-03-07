@@ -12,6 +12,7 @@ class BaseASRAdapter(ABC):
     supports_batch: bool
     supports_timestamps: bool
     supports_language_detection: bool
+    ready: bool = True
 
     @abstractmethod
     async def transcribe_file(self, request: ASRFileRequest, audio_bytes: bytes) -> ASRResult:

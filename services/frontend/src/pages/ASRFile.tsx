@@ -8,6 +8,7 @@ import type { ASRResponse } from "../types/api";
 
 export function ASRFile() {
   const [file, setFile] = useState<File | null>(null);
+  const [model, setModel] = useState("auto");
   const [response, setResponse] = useState<ASRResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +18,7 @@ export function ASRFile() {
     }
     const formData = new FormData();
     formData.set("file", file);
-    formData.set("model", "auto");
+    formData.set("model", model);
     formData.set("task", "transcribe");
     formData.set("language", "auto");
     formData.set("timestamps", "true");
@@ -37,6 +38,11 @@ export function ASRFile() {
       <Panel title="Batch transcription" eyebrow="ASR File">
         <div className="stack">
           <input type="file" accept="audio/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+          <select value={model} onChange={(event) => setModel(event.target.value)}>
+            <option value="auto">Auto route</option>
+            <option value="faster_whisper">Faster Whisper</option>
+            <option value="voxtral_realtime">Voxtral realtime upstream</option>
+          </select>
           <button onClick={onSubmit}>Transcribe</button>
           {error ? <p className="error-text">{error}</p> : null}
           {response ? (

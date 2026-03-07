@@ -31,7 +31,7 @@ class StreamingService:
         except KeyError:
             adapter = self.registry.fallback_stream()
         fallback_used = False
-        if not adapter.supports_streaming:
+        if not getattr(adapter, "ready", True) or not adapter.supports_streaming:
             fallback_used = True
             fallback = self.registry.fallback_stream()
             voice_model_fallback_total.labels(service="asr", requested=request.model, used=fallback.name).inc()

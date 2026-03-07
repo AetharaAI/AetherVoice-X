@@ -9,6 +9,7 @@ prometheus-client==0.22.1
 python-multipart==0.0.20
 numpy==2.3.2
 pydub==0.25.1
+httpx==0.28.1
 faster-whisper==1.2.0
 requests==2.32.5
 nvidia-cublas-cu12

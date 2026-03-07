@@ -3,17 +3,24 @@ import { useState } from "react";
 import { TranscriptPane } from "../components/asr/TranscriptPane";
 import { Badge } from "../components/common/Badge";
 import { Panel } from "../components/common/Panel";
+import { formatMs } from "../lib/format";
 import { useASRStream } from "../hooks/useASRStream";
 
 export function ASRLive() {
-  const { connected, sessionId, partials, finalText, latencyLabel, error, start, stop } = useASRStream();
+  const { connected, sessionId, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop } = useASRStream();
   const [triageEnabled, setTriageEnabled] = useState(false);
+  const [model, setModel] = useState("auto");
 
   return (
     <div className="page-grid">
       <Panel title="Live microphone stream" eyebrow="ASR Live">
         <div className="toolbar">
-          <button onClick={() => start("auto", triageEnabled)} disabled={connected}>
+          <select value={model} onChange={(event) => setModel(event.target.value)} disabled={connected}>
+            <option value="auto">Auto route</option>
+            <option value="voxtral_realtime">Voxtral realtime</option>
+            <option value="faster_whisper">Faster Whisper fallback</option>
+          </select>
+          <button onClick={() => start(model, triageEnabled)} disabled={connected}>
             Connect
           </button>
           <button onClick={stop} disabled={!connected} className="secondary">
@@ -39,11 +46,24 @@ export function ASRLive() {
             <strong>{partials.length}</strong>
           </div>
           <div className="meta-card">
+            <span className="label">Frames sent</span>
+            <strong>{framesSent}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">First partial</span>
+            <strong>{formatMs(firstPartialMs)}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Final latency</span>
+            <strong>{formatMs(finalMs)}</strong>
+          </div>
+          <div className="meta-card">
             <span className="label">Final chars</span>
             <strong>{finalText.length}</strong>
           </div>
         </div>
         <TranscriptPane partials={partials} finalText={finalText} />
+        <p className="muted">Model route: <strong>{model}</strong>. Auto will use the configured realtime lane when available and fall back if it is not ready.</p>
         {triageEnabled ? <p className="muted">Triage flag is being sent with the stream start request. Persisted classification will appear on the Sessions page once the backend lane records it.</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>

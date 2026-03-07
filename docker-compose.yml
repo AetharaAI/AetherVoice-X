@@ -66,6 +66,46 @@ services:
               device_ids: ["${ASR_GPU_IDS:-1}"]
               capabilities: [gpu]
 
+  voxtral:
+    image: vllm/vllm-openai:latest
+    profiles:
+      - voxtral
+    runtime: ${VOXTRAL_CONTAINER_RUNTIME:-nvidia}
+    env_file: .env
+    ipc: host
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      NVIDIA_VISIBLE_DEVICES: ${VOXTRAL_GPU_IDS:-2}
+      NVIDIA_DRIVER_CAPABILITIES: ${VOXTRAL_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    command:
+      - sh
+      - -lc
+      - >-
+        vllm serve ${VOXTRAL_MODEL_PATH}
+        --host 0.0.0.0
+        --port ${VOXTRAL_UPSTREAM_PORT:-8000}
+        --served-model-name ${VOXTRAL_REALTIME_MODEL_NAME:-mistralai/Voxtral-Mini-4B-Realtime-2602}
+        --trust-remote-code
+        --gpu-memory-utilization ${VOXTRAL_GPU_MEMORY_UTILIZATION:-0.85}
+        --max-model-len ${VOXTRAL_MAX_MODEL_LEN:-8192}
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${VOXTRAL_HOST_PORT:-8012}:${VOXTRAL_UPSTREAM_PORT:-8000}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${VOXTRAL_GPU_IDS:-2}"]
+              capabilities: [gpu]
+
   tts:
     build:
       context: .

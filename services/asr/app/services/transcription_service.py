@@ -29,6 +29,8 @@ class TranscriptionService:
             adapter = self.registry.get(request.model)
         except KeyError:
             adapter = self.registry.fallback_batch()
+        if not getattr(adapter, "ready", True) or not adapter.supports_batch:
+            adapter = self.registry.fallback_batch()
         used_fallback = False
         try:
             result = await adapter.transcribe_file(request, normalized)
