@@ -50,6 +50,7 @@ VOXTRAL_MODEL_PATH=/models/audio/mistralai/Voxtral-Mini-4B-Realtime-2602
 QWEN3_ASR_MODEL_PATH=/models/audio/Qwen/Qwen3-ASR-1.7B
 MOSS_MODEL_PATH=/models/audio/OpenMOSS-Team/MOSS-TTS-Realtime
 CHATTERBOX_BASE_URL=https://tts.aetherpro.us
+CHATTERBOX_DEFAULT_VOICE=Emily.wav
 ```
 
 3. Start the stack:

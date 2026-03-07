@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     sentinel_model_id: str = Field(default="trishtan/voxtral-sentinel-4b", validation_alias=AliasChoices("SENTINEL_MODEL_ID"))
     phi_mm_model_id: str = Field(default="microsoft/Phi-4-multimodal-instruct", validation_alias=AliasChoices("PHI_MM_MODEL_ID"))
     chatterbox_base_url: str = Field(default="http://localhost:8000", validation_alias=AliasChoices("CHATTERBOX_BASE_URL"))
+    chatterbox_default_voice: str = Field(default="Emily.wav", validation_alias=AliasChoices("CHATTERBOX_DEFAULT_VOICE"))
     moss_model_id: str = Field(default="OpenMOSS-Team/MOSS-TTS-Realtime", validation_alias=AliasChoices("MOSS_MODEL_ID"))
 
     faster_whisper_model_path: str | None = Field(default=None, validation_alias=AliasChoices("FASTER_WHISPER_MODEL_PATH"))

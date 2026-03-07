@@ -11,7 +11,10 @@ class ModelRegistry:
     def __init__(self) -> None:
         settings = get_settings()
         self.adapters = {
-            "chatterbox": ChatterboxAdapter(settings.chatterbox_base_url),
+            "chatterbox": ChatterboxAdapter(
+                settings.chatterbox_base_url,
+                default_voice=settings.chatterbox_default_voice,
+            ),
             "moss_realtime": MossRealtimeAdapter(),
         }
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8010}"
 TTS_TEXT="${TTS_TEXT:-Aether Voice platform smoke test. This is a synthesis check.}"
-TTS_VOICE="${TTS_VOICE:-default}"
+TTS_VOICE="${TTS_VOICE:-Emily.wav}"
 ASR_FILE="${ASR_FILE:-}"
 pretty_print() {
   if command -v jq >/dev/null 2>&1; then
