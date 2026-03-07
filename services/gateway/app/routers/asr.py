@@ -6,8 +6,9 @@ from typing import Any
 
 import websockets
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, status
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from ..clients.asr_client import ASRClient
+from ..clients.asr_client import ASRClient, ASRUpstreamError
 from ..config import get_settings
 from ..dependencies import get_asr_client, get_auth_context, get_quota_service, get_session_service
 from ..schemas.asr import (
@@ -50,7 +51,7 @@ async def parse_transcribe_request(request: Request) -> tuple[ASRTranscribeReque
         audio_url=form.get("audio_url"),
     )
     file = form.get("file")
-    return payload, file if isinstance(file, UploadFile) else None
+    return payload, file if isinstance(file, (UploadFile, StarletteUploadFile)) else None
 
 
 @router.post("/v1/asr/transcribe", response_model=ASRTranscribeResponse)
@@ -64,6 +65,8 @@ async def transcribe(
     ensure_scopes(auth, {"voice:asr"})
     await quota_service.check(auth, "/v1/asr/transcribe")
     payload, upload = await parse_transcribe_request(request)
+    if upload is None:
+        raise HTTPException(status_code=400, detail="ASR batch transcription requires multipart form-data with a 'file' field.")
     request_id = getattr(request.state, "request_id", prefixed_id("req"))
     session_id = prefixed_id("sess")
     settings = get_settings()
@@ -81,15 +84,29 @@ async def transcribe(
     internal_payload = payload.model_dump()
     internal_payload["model"] = model_used
     internal_payload["metadata"] = metadata
-    result = await asr_client.transcribe(
-        internal_payload,
-        audio_bytes=audio_bytes,
-        filename=filename,
-        content_type=content_type,
-        request_id=request_id,
-        session_id=session_id,
-        tenant_id=auth.tenant_id,
-    )
+    try:
+        result = await asr_client.transcribe(
+            internal_payload,
+            audio_bytes=audio_bytes,
+            filename=filename,
+            content_type=content_type,
+            request_id=request_id,
+            session_id=session_id,
+            tenant_id=auth.tenant_id,
+        )
+    except ASRUpstreamError as exc:
+        await session_service.record_request(
+            request_id,
+            session_id,
+            "asr_transcribe",
+            "/v1/asr/transcribe",
+            payload.model,
+            model_used,
+            "error",
+            {"total_ms": 0},
+            error_message=exc.detail,
+        )
+        raise HTTPException(status_code=exc.status_code if 400 <= exc.status_code < 500 else 502, detail=exc.detail) from exc
     await session_service.record_request(
         request_id,
         session_id,

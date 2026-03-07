@@ -4,6 +4,15 @@ import json
 
 import httpx
 
+from ..logging import logger
+
+
+class ASRUpstreamError(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
 
 class ASRClient:
     def __init__(self, base_url: str) -> None:
@@ -39,7 +48,19 @@ class ASRClient:
             files = {"file": (filename or "audio.wav", audio_bytes, content_type or "audio/wav")}
         data = {**payload, "metadata": json.dumps(payload.get("metadata", {}))}
         response = await self.client.post("/internal/transcribe", headers=headers, data=data, files=files)
-        response.raise_for_status()
+        if response.is_error:
+            detail = response.text
+            logger.error(
+                "asr_upstream_transcribe_failed",
+                extra={
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "tenant_id": tenant_id,
+                    "status_code": response.status_code,
+                    "detail": detail,
+                },
+            )
+            raise ASRUpstreamError(response.status_code, detail)
         return response.json()
 
     async def start_stream(self, payload: dict, *, request_id: str, session_id: str, tenant_id: str) -> dict:
