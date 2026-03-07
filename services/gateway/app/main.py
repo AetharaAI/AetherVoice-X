@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import Depends, FastAPI, Response
 
 from aether_common.postgres import PostgresPool
 from aether_common.redis import RedisManager
@@ -12,6 +12,7 @@ from aether_common.telemetry import metrics_content_type, metrics_payload
 from .clients.asr_client import ASRClient
 from .clients.tts_client import TTSClient
 from .config import get_settings
+from .dependencies import get_asr_client, get_tts_client
 from .logging import logger
 from .middleware.metrics import MetricsMiddleware
 from .middleware.request_id import RequestIDMiddleware
@@ -77,8 +78,19 @@ app.include_router(asr.router)
 app.include_router(tts.router)
 app.include_router(sessions.router)
 app.include_router(metrics.router)
+app.include_router(health.router, prefix="/api", include_in_schema=False)
+app.include_router(models.router, prefix="/api", include_in_schema=False)
+app.include_router(asr.router, prefix="/api", include_in_schema=False)
+app.include_router(tts.router, prefix="/api", include_in_schema=False)
+app.include_router(sessions.router, prefix="/api", include_in_schema=False)
+app.include_router(metrics.router, prefix="/api", include_in_schema=False)
 
 
 @app.get("/metrics", include_in_schema=False)
 async def internal_metrics() -> Response:
     return Response(content=metrics_payload(), media_type=metrics_content_type())
+
+
+@app.get("/api/health", include_in_schema=False)
+async def compatibility_health(asr_client: ASRClient = Depends(get_asr_client), tts_client: TTSClient = Depends(get_tts_client)):
+    return await health.health(asr_client=asr_client, tts_client=tts_client)
