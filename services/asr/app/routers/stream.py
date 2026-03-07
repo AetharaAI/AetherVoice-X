@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Header, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from ..logging import logger
 from ..schemas.requests import ASRStreamStartRequest, AudioFrame
@@ -24,7 +24,20 @@ async def start_stream(
         tenant_id=x_tenant_id,
         **payload,
     )
-    return await request.app.state.streaming_service.start(stream_request)
+    try:
+        return await request.app.state.streaming_service.start(stream_request)
+    except RuntimeError as exc:
+        logger.error(
+            "stream_start_failed",
+            extra={
+                "request_id": x_request_id,
+                "session_id": x_session_id,
+                "tenant_id": x_tenant_id,
+                "route": "/internal/stream/start",
+                "error": str(exc),
+            },
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.websocket("/internal/stream/{session_id}")

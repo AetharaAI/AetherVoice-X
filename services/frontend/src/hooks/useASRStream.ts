@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { startASRStream } from "../api/asr";
-import { getWsBase } from "../api/client";
 
 function encodePcm16(samples: Float32Array) {
   const buffer = new ArrayBuffer(samples.length * 2);
@@ -13,9 +12,23 @@ function encodePcm16(samples: Float32Array) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
+function resolveWsUrl(path: string): string {
+  if (/^wss?:\/\//.test(path)) {
+    return path;
+  }
+  const url = new URL(window.location.origin);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = path.startsWith("/") ? path : `/${path}`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 export function useASRStream() {
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [modelUsed, setModelUsed] = useState<string | null>(null);
+  const [fallbackUsed, setFallbackUsed] = useState(false);
   const [partials, setPartials] = useState<string[]>([]);
   const [finalText, setFinalText] = useState("");
   const [latencyLabel, setLatencyLabel] = useState("idle");
@@ -37,15 +50,20 @@ export function useASRStream() {
     try {
       setError(null);
       setSessionId(null);
+      setModelUsed(null);
+      setFallbackUsed(false);
       setPartials([]);
       setFinalText("");
       setFirstPartialMs(null);
       setFinalMs(null);
       setFramesSent(0);
-      setLatencyLabel("connecting");
+      setLatencyLabel("requesting-mic");
       sequenceRef.current = 0;
       startedAtRef.current = Date.now();
       firstPartialRecordedRef.current = false;
+      const userMedia = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRef.current = userMedia;
+      setLatencyLabel("starting-session");
       const streamSession = await startASRStream({
         model,
         language: "auto",
@@ -56,7 +74,10 @@ export function useASRStream() {
         metadata: { source: "mic" }
       });
       setSessionId(streamSession.session_id);
-      const socket = new WebSocket(`${getWsBase()}/asr/stream/${streamSession.session_id}`);
+      setModelUsed(streamSession.model_used ?? model);
+      setFallbackUsed(Boolean(streamSession.fallback_used));
+      setLatencyLabel("opening-socket");
+      const socket = new WebSocket(resolveWsUrl(streamSession.ws_url));
       socketRef.current = socket;
       socket.onmessage = (event) => {
         const payload = JSON.parse(event.data) as { type: string; text?: string };
@@ -76,10 +97,18 @@ export function useASRStream() {
           }
         }
       };
-      socket.onerror = () => setError("WebSocket stream failed");
+      socket.onerror = () => {
+        setError("WebSocket stream failed.");
+        setLatencyLabel("socket-error");
+        setConnected(false);
+      };
+      socket.onclose = () => {
+        setConnected(false);
+        if (latencyLabel !== "final") {
+          setLatencyLabel("closed");
+        }
+      };
       socket.onopen = async () => {
-        const userMedia = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRef.current = userMedia;
         const context = new AudioContext({ sampleRate: 16000 });
         contextRef.current = context;
         const source = context.createMediaStreamSource(userMedia);
@@ -104,9 +133,14 @@ export function useASRStream() {
         source.connect(processor);
         processor.connect(context.destination);
         setConnected(true);
+        setLatencyLabel("streaming");
       };
     } catch (err) {
       setError((err as Error).message);
+      setLatencyLabel("error");
+      mediaRef.current?.getTracks().forEach((track) => track.stop());
+      mediaRef.current = null;
+      setConnected(false);
     }
   }
 
@@ -123,7 +157,8 @@ export function useASRStream() {
     mediaRef.current = null;
     socketRef.current = null;
     setConnected(false);
+    setLatencyLabel("idle");
   }
 
-  return { connected, sessionId, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
+  return { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
 }

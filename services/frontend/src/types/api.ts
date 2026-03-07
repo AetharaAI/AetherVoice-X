@@ -131,4 +131,7 @@ export interface StreamStartResponse {
   session_id: string;
   ws_url: string;
   expires_in_seconds?: number;
+  model_requested?: string | null;
+  model_used?: string | null;
+  fallback_used?: boolean;
 }

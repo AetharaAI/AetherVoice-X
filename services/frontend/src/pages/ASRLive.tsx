@@ -7,7 +7,7 @@ import { formatMs } from "../lib/format";
 import { useASRStream } from "../hooks/useASRStream";
 
 export function ASRLive() {
-  const { connected, sessionId, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop } = useASRStream();
+  const { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop } = useASRStream();
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [model, setModel] = useState("auto");
 
@@ -35,7 +35,7 @@ export function ASRLive() {
         <div className="meta-grid">
           <div className="meta-card">
             <span className="label">Connection</span>
-            <strong>{connected ? "streaming" : "idle"}</strong>
+            <strong>{latencyLabel}</strong>
           </div>
           <div className="meta-card">
             <span className="label">Session</span>
@@ -58,12 +58,17 @@ export function ASRLive() {
             <strong>{formatMs(finalMs)}</strong>
           </div>
           <div className="meta-card">
+            <span className="label">Route used</span>
+            <strong>{modelUsed ?? "pending"}</strong>
+          </div>
+          <div className="meta-card">
             <span className="label">Final chars</span>
             <strong>{finalText.length}</strong>
           </div>
         </div>
         <TranscriptPane partials={partials} finalText={finalText} />
         <p className="muted">Model route: <strong>{model}</strong>. Auto will use the configured realtime lane when available and fall back if it is not ready.</p>
+        {fallbackUsed ? <p className="muted">Fallback was used for this stream start. The selected realtime lane was not available.</p> : null}
         {triageEnabled ? <p className="muted">Triage flag is being sent with the stream start request. Persisted classification will appear on the Sessions page once the backend lane records it.</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>

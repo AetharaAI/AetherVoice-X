@@ -8,6 +8,7 @@
 - External model resource visibility: working on the Models page.
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
 - Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
+- Live ASR observability: improved, but the next verification point is explicit Voxtral sidecar bring-up plus confirmed websocket traffic and microphone capture in the browser.
 
 ## Stable lanes
 
@@ -21,8 +22,9 @@
 
 - `voxtral_realtime`
   - implemented as an upstream-backed adapter
-  - uses OpenAI-compatible audio transcription requests for low-latency partial refreshes
-  - not marked ready until `VOXTRAL_REALTIME_BASE_URL` is configured
+  - now targets a vLLM realtime websocket upstream when configured
+  - not marked ready until `VOXTRAL_REALTIME_BASE_URL` and `VOXTRAL_REALTIME_WS_URL` are configured
+  - explicit selection should now fail loudly instead of silently falling back
 - `moss_realtime`
   - still scaffolded
 
@@ -41,6 +43,7 @@
 
 1. Stand up or point to a Voxtral upstream and set:
    - `VOXTRAL_REALTIME_BASE_URL`
+   - `VOXTRAL_REALTIME_WS_URL`
    - `VOXTRAL_REALTIME_MODEL_NAME`
    - `VOXTRAL_REALTIME_API_KEY` if required
 2. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.

@@ -66,7 +66,19 @@ class ASRClient:
     async def start_stream(self, payload: dict, *, request_id: str, session_id: str, tenant_id: str) -> dict:
         headers = {"X-Request-Id": request_id, "X-Session-Id": session_id, "X-Tenant-Id": tenant_id}
         response = await self.client.post("/internal/stream/start", headers=headers, json=payload)
-        response.raise_for_status()
+        if response.is_error:
+            detail = response.text
+            logger.error(
+                "asr_upstream_stream_start_failed",
+                extra={
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "tenant_id": tenant_id,
+                    "status_code": response.status_code,
+                    "detail": detail,
+                },
+            )
+            raise ASRUpstreamError(response.status_code, detail)
         return response.json()
 
     async def triage(self, payload: dict, *, request_id: str, tenant_id: str) -> dict:

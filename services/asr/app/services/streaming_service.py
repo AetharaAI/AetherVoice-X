@@ -26,12 +26,16 @@ class StreamingService:
         self.sessions: dict[str, dict] = {}
 
     async def start(self, request: ASRStreamStartRequest) -> dict:
+        allow_fallback = bool(request.metadata.extra.get("allow_stream_fallback", request.model == "auto"))
+        original_requested_model = str(request.metadata.extra.get("requested_model", request.model))
         try:
             adapter = self.registry.get(request.model)
         except KeyError:
             adapter = self.registry.fallback_stream()
         fallback_used = False
         if not getattr(adapter, "ready", True) or not adapter.supports_streaming:
+            if not allow_fallback:
+                raise RuntimeError(f"Requested realtime model '{original_requested_model}' is not configured or ready")
             fallback_used = True
             fallback = self.registry.fallback_stream()
             voice_model_fallback_total.labels(service="asr", requested=request.model, used=fallback.name).inc()
@@ -41,9 +45,10 @@ class StreamingService:
             extra={
                 "request_id": request.request_id,
                 "session_id": request.session_id,
-                "model_requested": request.model,
+                "model_requested": original_requested_model,
                 "model_used": adapter.name,
                 "fallback_used": fallback_used,
+                "allow_fallback": allow_fallback,
             },
         )
         session = await adapter.start_stream(request.model_copy(update={"model": adapter.name}))
@@ -67,7 +72,11 @@ class StreamingService:
             },
         )
         self.telemetry.session_started()
-        return session.model_dump()
+        payload = session.model_dump()
+        payload["model_used"] = adapter.name
+        payload["fallback_used"] = fallback_used
+        payload["model_requested"] = original_requested_model
+        return payload
 
     async def push(self, session_id: str, frame: AudioFrame) -> list[dict]:
         state = self.sessions[session_id]

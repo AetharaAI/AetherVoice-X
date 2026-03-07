@@ -67,7 +67,9 @@ services:
               capabilities: [gpu]
 
   voxtral:
-    image: vllm/vllm-openai:latest
+    build:
+      context: .
+      dockerfile: services/voxtral/Dockerfile
     profiles:
       - voxtral
     runtime: ${VOXTRAL_CONTAINER_RUNTIME:-nvidia}
@@ -80,6 +82,8 @@ services:
       TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
       NVIDIA_VISIBLE_DEVICES: ${VOXTRAL_GPU_IDS:-2}
       NVIDIA_DRIVER_CAPABILITIES: ${VOXTRAL_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+      VLLM_DISABLE_COMPILE_CACHE: ${VOXTRAL_DISABLE_COMPILE_CACHE:-1}
+      VLLM_USE_V1: 1
     command:
       - sh
       - -lc
@@ -88,9 +92,13 @@ services:
         --host 0.0.0.0
         --port ${VOXTRAL_UPSTREAM_PORT:-8000}
         --served-model-name ${VOXTRAL_REALTIME_MODEL_NAME:-mistralai/Voxtral-Mini-4B-Realtime-2602}
-        --trust-remote-code
+        --tokenizer-mode mistral
+        --config-format mistral
+        --load-format mistral
+        --enforce-eager
         --gpu-memory-utilization ${VOXTRAL_GPU_MEMORY_UTILIZATION:-0.85}
         --max-model-len ${VOXTRAL_MAX_MODEL_LEN:-8192}
+        --compilation_config '{"cudagraph_mode":"PIECEWISE"}'
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${VOXTRAL_HOST_PORT:-8012}:${VOXTRAL_UPSTREAM_PORT:-8000}"
     extra_hosts:

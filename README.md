@@ -100,7 +100,7 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 
 - `faster_whisper`: implemented for file transcription and used for streaming fallback
 - `chatterbox`: implemented as an HTTP passthrough adapter
-- `voxtral_realtime`: implemented as an upstream-backed low-latency live ASR lane when `VOXTRAL_REALTIME_BASE_URL` is configured
+- `voxtral_realtime`: implemented against vLLM's `/v1/realtime` websocket when `VOXTRAL_REALTIME_BASE_URL` or `VOXTRAL_REALTIME_WS_URL` is configured
 - `qwen3_asr`: scaffold
 - `moss_realtime`: scaffold
 - `sentinel`: rule-based scaffold for domain triage
@@ -108,6 +108,9 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 
 ## Development notes
 
-- The first Voxtral live integration uses repeated low-latency transcription refreshes against an OpenAI-compatible upstream while keeping the current websocket contract stable.
-- You can launch a local Voxtral sidecar with `docker compose --profile voxtral up -d voxtral` and then set `VOXTRAL_REALTIME_BASE_URL=http://voxtral:8000`.
+- Voxtral Realtime is documented by Mistral and vLLM to run through vLLM's realtime websocket API on `/v1/realtime`. This repo keeps the existing browser and gateway contracts stable and translates them inside the ASR service.
+- You can launch a local Voxtral sidecar with `docker compose --profile voxtral up -d --build voxtral` and then set:
+  - `VOXTRAL_REALTIME_BASE_URL=http://voxtral:8000`
+  - `VOXTRAL_REALTIME_WS_URL=ws://voxtral:8000`
+- The local Voxtral sidecar uses a dedicated Dockerfile that upgrades to the nightly audio-capable vLLM build, matching the current official guidance for Voxtral Realtime.
 - The public API surface stays stable while model backends evolve behind adapters and routing policy.

@@ -55,6 +55,9 @@ class ASRStreamStartResponse(BaseModel):
     session_id: str
     ws_url: str
     expires_in_seconds: int = 3600
+    model_requested: str | None = None
+    model_used: str | None = None
+    fallback_used: bool = False
 
 
 class ASRTriageRequest(BaseModel):

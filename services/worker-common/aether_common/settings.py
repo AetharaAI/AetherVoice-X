@@ -64,10 +64,11 @@ class Settings(BaseSettings):
 
     voxtral_model_id: str = Field(default="mistralai/Voxtral-Mini-4B-Realtime-2602", validation_alias=AliasChoices("VOXTRAL_MODEL_ID"))
     voxtral_realtime_base_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_BASE_URL"))
+    voxtral_realtime_ws_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_WS_URL"))
     voxtral_realtime_api_key: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_API_KEY"))
     voxtral_realtime_model_name: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_MODEL_NAME"))
     voxtral_realtime_timeout_seconds: float = Field(default=90.0, validation_alias=AliasChoices("VOXTRAL_REALTIME_TIMEOUT_SECONDS"))
-    voxtral_stream_partial_window_ms: int = Field(default=1600, validation_alias=AliasChoices("VOXTRAL_STREAM_PARTIAL_WINDOW_MS"))
+    voxtral_stream_partial_window_ms: int = Field(default=480, validation_alias=AliasChoices("VOXTRAL_STREAM_PARTIAL_WINDOW_MS"))
     faster_whisper_model_size: str = Field(default="small", validation_alias=AliasChoices("FASTER_WHISPER_MODEL_SIZE"))
     qwen3_asr_model_id: str = Field(default="Qwen/Qwen3-ASR-1.7B", validation_alias=AliasChoices("QWEN3_ASR_MODEL_ID"))
     sentinel_model_id: str = Field(default="trishtan/voxtral-sentinel-4b", validation_alias=AliasChoices("SENTINEL_MODEL_ID"))

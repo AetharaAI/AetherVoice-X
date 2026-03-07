@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from pathlib import Path
+from contextlib import suppress
 
 import httpx
+import websockets
 
 from .base import BaseASRAdapter
 from ..logging import logger
@@ -36,12 +38,14 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         self,
         *,
         base_url: str | None,
+        ws_url: str | None,
         model_name: str,
         api_key: str | None = None,
-        partial_window_ms: int = 1600,
+        partial_window_ms: int = 480,
         timeout_seconds: float = 90.0,
     ) -> None:
         self.base_url = (base_url or "").rstrip("/")
+        self.ws_url = (ws_url or self.base_url.replace("https://", "wss://").replace("http://", "ws://")).rstrip("/")
         self.model_name = model_name
         self.api_key = api_key
         self.partial_window_ms = partial_window_ms
@@ -53,6 +57,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
             extra={
                 "voxtral_ready": self.ready,
                 "voxtral_base_url": self.base_url or "unset",
+                "voxtral_ws_url": self.ws_url or "unset",
                 "voxtral_model_name": self.model_name,
                 "voxtral_partial_window_ms": self.partial_window_ms,
             },
@@ -149,12 +154,79 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
             artifacts={"voxtral_raw_response": json.dumps(payload)},
         )
 
+    async def _recv_until(self, websocket, session_id: str, wanted_types: set[str], timeout_seconds: float = 5.0) -> dict:
+        while True:
+            message = await asyncio.wait_for(websocket.recv(), timeout=timeout_seconds)
+            payload = json.loads(message)
+            message_type = payload.get("type")
+            if message_type in wanted_types:
+                return payload
+            logger.info(
+                "voxtral_upstream_event_ignored",
+                extra={"session_id": session_id, "event_type": message_type},
+            )
+
+    async def _receiver_loop(self, session_id: str) -> None:
+        state = self._sessions[session_id]
+        websocket = state["upstream"]
+        queue: asyncio.Queue[dict] = state["events"]
+        try:
+            async for message in websocket:
+                payload = json.loads(message)
+                message_type = payload.get("type")
+                if message_type == "transcription.delta":
+                    delta = str(payload.get("delta", "")).strip()
+                    if not delta:
+                        continue
+                    state["partial_text"] = f"{state['partial_text']}{delta}".strip()
+                    await queue.put(
+                        {
+                            "type": "partial_transcript",
+                            "session_id": session_id,
+                            "seq": state["last_seq"],
+                            "stable": False,
+                            "text": state["partial_text"],
+                            "start_ms": 0,
+                            "end_ms": state["buffered_ms"],
+                        }
+                    )
+                elif message_type == "transcription.done":
+                    state["final_payload"] = payload
+                    state["done"].set()
+                    await queue.put({"type": "upstream_done", "session_id": session_id})
+                elif message_type == "error":
+                    state["error"] = payload
+                    state["done"].set()
+                    await queue.put({"type": "upstream_error", "session_id": session_id, "error": payload})
+                else:
+                    logger.info(
+                        "voxtral_upstream_event",
+                        extra={"session_id": session_id, "event_type": message_type},
+                    )
+        except Exception as exc:
+            state["error"] = {"type": "error", "error": str(exc)}
+            state["done"].set()
+            with suppress(asyncio.QueueFull):
+                await queue.put({"type": "upstream_error", "session_id": session_id, "error": repr(exc)})
+            logger.error(
+                "voxtral_receiver_failed",
+                extra={"session_id": session_id, "error": repr(exc)},
+            )
+
     async def transcribe_file(self, request: ASRFileRequest, audio_bytes: bytes) -> ASRResult:
         return await self._transcribe_wav_bytes(request, audio_bytes)
 
     async def start_stream(self, request: ASRStreamStartRequest) -> StreamSession:
         if not self.ready:
             raise RuntimeError("Voxtral realtime upstream is not configured")
+        websocket = await websockets.connect(
+            f"{self.ws_url}/v1/realtime",
+            max_size=None,
+            additional_headers=self._headers() or None,
+        )
+        created = await self._recv_until(websocket, request.session_id, {"session.created"})
+        await websocket.send(json.dumps({"type": "session.update", "model": self.model_name}))
+        await websocket.send(json.dumps({"type": "input_audio_buffer.commit"}))
         logger.info(
             "voxtral_stream_started",
             extra={
@@ -162,28 +234,45 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "request_id": request.request_id,
                 "model_used": self.name,
                 "voxtral_base_url": self.base_url,
+                "voxtral_ws_url": self.ws_url,
                 "voxtral_model_name": self.model_name,
                 "sample_rate": request.sample_rate,
                 "channels": request.channels,
+                "upstream_session_id": created.get("id"),
             },
         )
         self._sessions[request.session_id] = {
             "request": request,
-            "buffer": bytearray(),
             "buffered_ms": 0,
-            "last_partial_text": "",
             "last_partial_ms": 0,
+            "last_seq": 0,
+            "partial_text": "",
+            "events": asyncio.Queue(),
+            "done": asyncio.Event(),
+            "error": None,
+            "final_payload": None,
+            "upstream": websocket,
         }
+        self._sessions[request.session_id]["receiver_task"] = asyncio.create_task(self._receiver_loop(request.session_id))
         return StreamSession(session_id=request.session_id, model=self.name, expires_in_seconds=3600)
 
     async def push_audio_frame(self, session_id: str, frame: AudioFrame) -> list[dict]:
         state = self._sessions[session_id]
         pcm_bytes = decode_payload_b64(frame.payload_b64)
-        state["buffer"].extend(pcm_bytes)
         bytes_per_ms = max(frame.sample_rate * frame.channels * 2 / 1000, 1)
-        state["buffered_ms"] = int(len(state["buffer"]) / bytes_per_ms)
-        if state["buffered_ms"] - state["last_partial_ms"] < self.partial_window_ms:
-            return []
+        state["buffered_ms"] += int(len(pcm_bytes) / bytes_per_ms)
+        state["last_seq"] = frame.seq
+        await state["upstream"].send(
+            json.dumps(
+                {
+                    "type": "input_audio_buffer.append",
+                    "audio": frame.payload_b64,
+                }
+            )
+        )
+        if state["buffered_ms"] - state["last_partial_ms"] >= self.partial_window_ms:
+            await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit"}))
+            state["last_partial_ms"] = state["buffered_ms"]
         logger.info(
             "voxtral_stream_partial_window_ready",
             extra={
@@ -193,38 +282,17 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "partial_window_ms": self.partial_window_ms,
             },
         )
-        wav_bytes = pcm16_to_wav_bytes(
-            bytes(state["buffer"]),
-            sample_rate=frame.sample_rate,
-            channels=frame.channels,
-        )
-        request = ASRFileRequest(
-            request_id=f"{session_id}_voxtral_partial_{frame.seq}",
-            session_id=session_id,
-            tenant_id=state["request"].tenant_id,
-            model=self.name,
-            task="transcribe",
-            language=state["request"].language,
-            timestamps=True,
-            storage_mode="ephemeral",
-            metadata=state["request"].metadata,
-        )
-        result = await self._transcribe_wav_bytes(request, wav_bytes)
-        if not result.text or result.text == state["last_partial_text"]:
-            return []
-        state["last_partial_text"] = result.text
-        state["last_partial_ms"] = state["buffered_ms"]
-        return [
-            {
-                "type": "partial_transcript",
-                "session_id": session_id,
-                "seq": frame.seq,
-                "stable": False,
-                "text": result.text,
-                "start_ms": result.segments[0].start_ms if result.segments else 0,
-                "end_ms": result.segments[-1].end_ms if result.segments else state["buffered_ms"],
-            }
-        ]
+        events: list[dict] = []
+        while True:
+            try:
+                event = state["events"].get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if event["type"] == "partial_transcript":
+                events.append(event)
+            elif event["type"] == "upstream_error":
+                raise RuntimeError(f"Voxtral realtime upstream error: {event['error']}")
+        return events
 
     async def end_stream(self, session_id: str) -> ASRResult:
         state = self._sessions.pop(session_id)
@@ -236,23 +304,37 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "model_used": self.name,
             },
         )
-        wav_bytes = pcm16_to_wav_bytes(
-            bytes(state["buffer"]),
-            sample_rate=state["request"].sample_rate,
-            channels=state["request"].channels,
-        )
-        request = ASRFileRequest(
+        await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit", "final": True}))
+        await asyncio.wait_for(state["done"].wait(), timeout=15.0)
+        receiver_task = state.get("receiver_task")
+        if receiver_task is not None:
+            receiver_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await receiver_task
+        await state["upstream"].close()
+        if state["error"] is not None:
+            raise RuntimeError(f"Voxtral realtime upstream error: {state['error']}")
+        payload = state["final_payload"] or {}
+        text = str(payload.get("text", "")).strip() or state["partial_text"]
+        return ASRResult(
             request_id=f"{session_id}_voxtral_final",
             session_id=session_id,
-            tenant_id=state["request"].tenant_id,
-            model=self.name,
             task="transcribe",
-            language=state["request"].language,
-            timestamps=True,
-            storage_mode="ephemeral",
-            metadata=state["request"].metadata,
+            model_requested=self.name,
+            model_used=self.name,
+            language_detected=payload.get("language"),
+            duration_ms=state["buffered_ms"],
+            text=text,
+            segments=[
+                ASRSegment(
+                    segment_id="seg_1",
+                    start_ms=0,
+                    end_ms=state["buffered_ms"],
+                    text=text,
+                )
+            ]
+            if text
+            else [],
+            timings=TimingBreakdown(total_ms=state["buffered_ms"]),
+            artifacts={"voxtral_realtime_final": json.dumps(payload)},
         )
-        result = await self._transcribe_wav_bytes(request, wav_bytes)
-        if not result.segments:
-            result.duration_ms = state["buffered_ms"]
-        return result

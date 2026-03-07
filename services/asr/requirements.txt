@@ -12,5 +12,6 @@ pydub==0.25.1
 httpx==0.28.1
 faster-whisper==1.2.0
 requests==2.32.5
+websockets==15.0.1
 nvidia-cublas-cu12
 nvidia-cudnn-cu12==9.*

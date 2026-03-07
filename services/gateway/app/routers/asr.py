@@ -146,15 +146,30 @@ async def start_stream(
     model_used = choose_asr_model(payload.model, streaming=True, language=payload.language, triage_enabled=payload.triage_enabled, settings=settings)
     metadata = payload.metadata.model_dump()
     metadata["tenant_id"] = auth.tenant_id
+    extra = dict(metadata.get("extra") or {})
+    extra["requested_model"] = payload.model
+    extra["allow_stream_fallback"] = payload.model == "auto"
+    metadata["extra"] = extra
     await session_service.create_session(session_id, auth.tenant_id, "asr_stream", payload.model, model_used, metadata)
     internal_payload = payload.model_dump()
     internal_payload["model"] = model_used
     internal_payload["metadata"] = metadata
-    await asr_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
-    return ASRStreamStartResponse(session_id=session_id, ws_url=f"/v1/asr/stream/{session_id}", expires_in_seconds=3600)
+    try:
+        result = await asr_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
+    except ASRUpstreamError as exc:
+        raise HTTPException(status_code=exc.status_code if 400 <= exc.status_code < 500 else 503, detail=exc.detail) from exc
+    return ASRStreamStartResponse(
+        session_id=session_id,
+        ws_url=f"/ws/asr/stream/{session_id}",
+        expires_in_seconds=result.get("expires_in_seconds", 3600),
+        model_requested=payload.model,
+        model_used=result.get("model_used", model_used),
+        fallback_used=bool(result.get("fallback_used", False)),
+    )
 
 
 @router.websocket("/v1/asr/stream/{session_id}")
+@router.websocket("/ws/asr/stream/{session_id}")
 async def stream_proxy(websocket: WebSocket, session_id: str) -> None:
     settings: Settings = get_settings()
     await websocket.accept()

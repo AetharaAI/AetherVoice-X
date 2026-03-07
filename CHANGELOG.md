@@ -17,4 +17,9 @@
   - micro-batch live partial generation over the existing websocket contract
   - live ASR model selector and browser-side timing visibility
   - benchmark helper script for live ASR websocket timing
-
+- Hardened the live ASR debugging path:
+  - live stream start now returns the actual edge websocket path
+  - explicit Voxtral selection now fails loudly when the realtime lane is not configured instead of silently falling back
+  - live UI now asks for microphone permission before opening the websocket and shows the actual route used / fallback state
+  - structured JSON logs now include dynamic extra fields so upstream URLs, readiness state, and error details are visible
+  - Voxtral sidecar command now includes the Mistral-specific vLLM flags (`--tokenizer-mode mistral`, `--config-format mistral`, `--load-format mistral`)
