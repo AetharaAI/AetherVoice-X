@@ -12,8 +12,10 @@ from ..utils.time import elapsed_ms
 
 try:
     from faster_whisper import WhisperModel
-except Exception:  # pragma: no cover - optional import at runtime
+    FASTER_WHISPER_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - optional import at runtime
     WhisperModel = None
+    FASTER_WHISPER_IMPORT_ERROR = exc
 
 
 class FasterWhisperAdapter(BaseASRAdapter):
@@ -32,7 +34,9 @@ class FasterWhisperAdapter(BaseASRAdapter):
 
     def _get_model(self):
         if WhisperModel is None:
-            raise RuntimeError("faster-whisper is not installed in this environment")
+            detail = repr(FASTER_WHISPER_IMPORT_ERROR) if FASTER_WHISPER_IMPORT_ERROR else "unknown import failure"
+            logger.error("faster_whisper_import_failed", extra={"error": detail})
+            raise RuntimeError(f"faster-whisper import failed: {detail}") from FASTER_WHISPER_IMPORT_ERROR
         if self._model is None:
             logger.info("loading_faster_whisper_model", extra={"model_used": self.model_source})
             self._model = WhisperModel(self.model_source, device=self.device, compute_type=self.compute_type)
