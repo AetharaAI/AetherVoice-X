@@ -26,10 +26,12 @@ class TTSRequest(BaseModel):
 
 class TTSResponse(BaseModel):
     request_id: str
+    session_id: str
     model_used: str
     audio_url: str
     duration_ms: int
     timings: TimingBreakdown
+    artifacts: dict[str, Any] = Field(default_factory=dict)
 
 
 class TTSStreamStartRequest(BaseModel):

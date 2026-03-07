@@ -209,6 +209,65 @@ textarea, input, select, pre {
   gap: 0.75rem;
 }
 
+.meta-grid, .key-value-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.meta-card, .detail-card {
+  border-radius: 22px;
+  padding: 1rem;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+}
+
+.meta-card strong {
+  display: block;
+  margin-top: 0.45rem;
+}
+
+.detail-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.detail-section {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.detail-section h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.key-value-row, .artifact-row, .segment-row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.artifact-list, .segment-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inline-code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.82rem;
+  color: var(--accent-cool);
+}
+
 .list-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr;
@@ -263,6 +322,13 @@ textarea, input, select, pre {
 .metric-bars {
   display: grid;
   gap: 1rem;
+}
+
+.raw-metrics summary {
+  cursor: pointer;
+  margin-bottom: 0.85rem;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
 }
 
 .metric-track {

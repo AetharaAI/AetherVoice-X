@@ -10,6 +10,7 @@ function b64ToBytes(payload: string) {
 
 export function useTTSStream() {
   const [connected, setConnected] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState(0);
   const [finalUrl, setFinalUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([]);
@@ -20,6 +21,10 @@ export function useTTSStream() {
 
   async function connect(model = "moss_realtime") {
     try {
+      setError(null);
+      setChunkCount(0);
+      setFinalUrl(null);
+      setEvents([]);
       const session = await startTTSStream({
         model,
         voice: "default",
@@ -28,6 +33,7 @@ export function useTTSStream() {
         context_mode: "conversation",
         metadata: { source: "console" }
       });
+      setSessionId(session.session_id);
       const socket = new WebSocket(`${getWsBase()}/tts/stream/${session.session_id}`);
       socketRef.current = socket;
       socket.onopen = () => setConnected(true);
@@ -62,8 +68,9 @@ export function useTTSStream() {
       socketRef.current.send(JSON.stringify({ type: "end_stream" }));
       socketRef.current.close();
     }
+    setSessionId(null);
     setConnected(false);
   }
 
-  return { connected, chunkCount, finalUrl, events, error, connect, send, stop };
+  return { connected, sessionId, chunkCount, finalUrl, events, error, connect, send, stop };
 }

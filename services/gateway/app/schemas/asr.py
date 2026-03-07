@@ -38,6 +38,7 @@ class ASRTranscribeResponse(BaseModel):
     text: str
     segments: list[ASRSegment] = Field(default_factory=list)
     timings: TimingBreakdown
+    artifacts: dict[str, Any] = Field(default_factory=dict)
 
 
 class ASRStreamStartRequest(BaseModel):

@@ -53,6 +53,7 @@ async def synthesize(
         fallback_used=result["model_used"] != model_used,
     )
     await session_service.save_tts_output(session_id, result["model_used"], payload.voice, payload.text, result["audio_url"], result["duration_ms"])
+    result["session_id"] = session_id
     return TTSResponse.model_validate(result)
 
 

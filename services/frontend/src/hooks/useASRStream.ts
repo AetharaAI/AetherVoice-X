@@ -31,6 +31,7 @@ export function useASRStream() {
   async function start(model = "auto", triageEnabled = false) {
     try {
       setError(null);
+      setSessionId(null);
       setPartials([]);
       setFinalText("");
       const streamSession = await startASRStream({
@@ -101,6 +102,7 @@ export function useASRStream() {
     contextRef.current = null;
     mediaRef.current = null;
     socketRef.current = null;
+    setSessionId(null);
     setConnected(false);
   }
 

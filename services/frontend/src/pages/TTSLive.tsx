@@ -5,7 +5,7 @@ import { WaveformPlaceholder } from "../components/tts/WaveformPlaceholder";
 import { useTTSStream } from "../hooks/useTTSStream";
 
 export function TTSLive() {
-  const { connected, chunkCount, finalUrl, events, error, connect, send, stop } = useTTSStream();
+  const { connected, sessionId, chunkCount, finalUrl, events, error, connect, send, stop } = useTTSStream();
   const [text, setText] = useState("A technician is being dispatched to your location now.");
 
   return (
@@ -21,6 +21,24 @@ export function TTSLive() {
           <button onClick={stop} disabled={!connected} className="secondary">
             End stream
           </button>
+        </div>
+        <div className="meta-grid">
+          <div className="meta-card">
+            <span className="label">Connection</span>
+            <strong>{connected ? "open" : "idle"}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Session</span>
+            <strong>{sessionId ?? "none"}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Chunks</span>
+            <strong>{chunkCount}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Final audio</span>
+            <strong>{finalUrl ? "ready" : "pending"}</strong>
+          </div>
         </div>
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={5} />
         <WaveformPlaceholder chunks={chunkCount} />
