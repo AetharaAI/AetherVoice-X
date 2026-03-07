@@ -1,0 +1,222 @@
+services:
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: asr-redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asr-network
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: asr-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - asr-network
+
+  # Create MinIO bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c " sleep 10; /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin}; /usr/bin/mc mb myminio/${MINIO_BUCKET:-asr-storage} || true; /usr/bin/mc anonymous set private myminio/${MINIO_BUCKET:-asr-storage}; exit 0; "
+    networks:
+      - asr-network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: asr-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-asr-storage}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:${API_PORT:-8010}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - asr-network
+    restart: unless-stopped
+
+  # Celery Worker (GPU-enabled)
+  worker:
+    user: "0:0"
+    build:
+      context: ../worker
+      dockerfile: Dockerfile
+    container_name: asr-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-asr-storage}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-1}
+      WHISPER_MODELS_DIR: ${WHISPER_MODELS_DIR:-/models}
+      WHISPER_PRELOAD_MODELS: ${WHISPER_PRELOAD_MODELS:-large-v3}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+      HF_HOME: ${HF_HOME:-/mnt/hf-cache}
+      TRANSFORMERS_CACHE: ${HF_HOME:-/mnt/hf-cache}
+      HF_DATASETS_CACHE: ${HF_HOME:-/mnt/hf-cache}
+    volumes:
+      - ${HOST_MODELS_DIR:-/mnt/aetherpro/models/audio}:/models
+      - ${HOST_HF_CACHE_DIR:-/mnt/aetherpro/hf-cache}:/mnt/hf-cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ gpu ]
+              device_ids: [ "${GPU_DEVICE_ID:-0}" ]
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - asr-network
+    restart: unless-stopped
+
+  # Voxtral Realtime ASR (vLLM nightly — required for voxtral_realtime arch)
+  voxtral:
+    build:
+      context: ./voxtral
+      dockerfile: Dockerfile
+    container_name: asr-voxtral
+    command:
+      - /models/mistralai/Voxtral-Mini-4B-Realtime-2602
+      - --gpu-memory-utilization
+      - "0.60"
+      - --max-model-len
+      - "8192"
+      - --enforce-eager
+    volumes:
+      - /mnt/aetherpro/models/audio:/models:ro
+    environment:
+      - HF_HOME=/models
+      - NVIDIA_VISIBLE_DEVICES=${VOXTRAL_GPU_DEVICE_ID:-1}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VLLM_DISABLE_COMPILE_CACHE=1
+    ports:
+      - "127.0.0.1:${VOXTRAL_PORT:-8020}:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ "${VOXTRAL_GPU_DEVICE_ID:-1}" ]
+              capabilities: [ gpu ]
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - asr-network
+    restart: unless-stopped
+
+  # React Frontend
+  ui:
+    build:
+      context: ../ui
+      dockerfile: Dockerfile
+    container_name: asr-ui
+    ports:
+      - "127.0.0.1:${UI_PORT:-3010}:80"
+    depends_on:
+      - api
+    networks:
+      - asr-network
+    restart: unless-stopped
+
+  # Prometheus (Optional - for monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: asr-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - asr-network
+    profiles:
+      - monitoring
+
+  # Grafana (Optional - for dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: asr-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - asr-network
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+
+
+networks:
+  asr-network:
+    driver: bridge

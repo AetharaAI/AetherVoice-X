@@ -58,6 +58,16 @@ CHATTERBOX_BASE_URL=https://tts.aetherpro.us
 docker compose up --build
 ```
 
+On nodes that already run host nginx, the unified gateway and frontend are intentionally published only on `127.0.0.1` by default:
+
+```env
+HOST_BIND_IP=127.0.0.1
+GATEWAY_PORT=8010
+FRONTEND_PORT=3010
+```
+
+That matches a common host-nginx upstream layout and keeps the containers off the public internet.
+
 4. Open:
 
 - Frontend: `http://localhost:3000`
