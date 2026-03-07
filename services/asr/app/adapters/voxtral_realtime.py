@@ -48,6 +48,15 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         self.ready = bool(self.base_url)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.ready else None
         self._sessions: dict[str, dict] = {}
+        logger.info(
+            "voxtral_adapter_initialized",
+            extra={
+                "voxtral_ready": self.ready,
+                "voxtral_base_url": self.base_url or "unset",
+                "voxtral_model_name": self.model_name,
+                "voxtral_partial_window_ms": self.partial_window_ms,
+            },
+        )
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
@@ -58,6 +67,18 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         if not self.ready or self._client is None:
             raise RuntimeError("Voxtral realtime upstream is not configured")
         started = __import__("time").perf_counter()
+        logger.info(
+            "voxtral_upstream_request_started",
+            extra={
+                "request_id": request.request_id,
+                "session_id": request.session_id,
+                "model_used": self.name,
+                "voxtral_base_url": self.base_url,
+                "voxtral_model_name": self.model_name,
+                "audio_bytes": len(audio_bytes),
+                "task": request.task,
+            },
+        )
         fields: list[tuple[str, str]] = [
             ("model", self.model_name),
             ("response_format", "verbose_json" if request.timestamps else "json"),
@@ -103,6 +124,17 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         language_detected = payload.get("language")
         if language_detected in {"", "auto"}:
             language_detected = None
+        logger.info(
+            "voxtral_upstream_request_completed",
+            extra={
+                "request_id": request.request_id,
+                "session_id": request.session_id,
+                "model_used": self.name,
+                "segments_count": len(segments),
+                "text_chars": len(text),
+                "inference_ms": timings.inference_ms,
+            },
+        )
         return ASRResult(
             request_id=request.request_id,
             session_id=request.session_id,
@@ -123,6 +155,18 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
     async def start_stream(self, request: ASRStreamStartRequest) -> StreamSession:
         if not self.ready:
             raise RuntimeError("Voxtral realtime upstream is not configured")
+        logger.info(
+            "voxtral_stream_started",
+            extra={
+                "session_id": request.session_id,
+                "request_id": request.request_id,
+                "model_used": self.name,
+                "voxtral_base_url": self.base_url,
+                "voxtral_model_name": self.model_name,
+                "sample_rate": request.sample_rate,
+                "channels": request.channels,
+            },
+        )
         self._sessions[request.session_id] = {
             "request": request,
             "buffer": bytearray(),
@@ -140,6 +184,15 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         state["buffered_ms"] = int(len(state["buffer"]) / bytes_per_ms)
         if state["buffered_ms"] - state["last_partial_ms"] < self.partial_window_ms:
             return []
+        logger.info(
+            "voxtral_stream_partial_window_ready",
+            extra={
+                "session_id": session_id,
+                "seq": frame.seq,
+                "buffered_ms": state["buffered_ms"],
+                "partial_window_ms": self.partial_window_ms,
+            },
+        )
         wav_bytes = pcm16_to_wav_bytes(
             bytes(state["buffer"]),
             sample_rate=frame.sample_rate,
@@ -175,6 +228,14 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
 
     async def end_stream(self, session_id: str) -> ASRResult:
         state = self._sessions.pop(session_id)
+        logger.info(
+            "voxtral_stream_finishing",
+            extra={
+                "session_id": session_id,
+                "buffered_ms": state["buffered_ms"],
+                "model_used": self.name,
+            },
+        )
         wav_bytes = pcm16_to_wav_bytes(
             bytes(state["buffer"]),
             sample_rate=state["request"].sample_rate,

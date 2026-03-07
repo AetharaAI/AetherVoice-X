@@ -36,6 +36,16 @@ class StreamingService:
             fallback = self.registry.fallback_stream()
             voice_model_fallback_total.labels(service="asr", requested=request.model, used=fallback.name).inc()
             adapter = fallback
+        logger.info(
+            "stream_adapter_selected",
+            extra={
+                "request_id": request.request_id,
+                "session_id": request.session_id,
+                "model_requested": request.model,
+                "model_used": adapter.name,
+                "fallback_used": fallback_used,
+            },
+        )
         session = await adapter.start_stream(request.model_copy(update={"model": adapter.name}))
         self.sessions[request.session_id] = {
             "adapter": adapter,
@@ -62,6 +72,16 @@ class StreamingService:
     async def push(self, session_id: str, frame: AudioFrame) -> list[dict]:
         state = self.sessions[session_id]
         events = await state["adapter"].push_audio_frame(session_id, frame)
+        if events:
+            logger.info(
+                "stream_events_emitted",
+                extra={
+                    "session_id": session_id,
+                    "model_used": state["adapter"].name,
+                    "seq": frame.seq,
+                    "events_count": len(events),
+                },
+            )
         for event in events:
             await self.redis.rpush(f"voice:session:{session_id}:events", json.dumps(event))
             if event["type"] == "partial_transcript" and not state["first_partial_recorded"]:

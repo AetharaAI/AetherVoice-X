@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, WebS
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from ..clients.asr_client import ASRClient, ASRUpstreamError
+from ..logging import logger
 from ..config import get_settings
 from ..dependencies import get_asr_client, get_auth_context, get_quota_service, get_session_service
 from ..schemas.asr import (
@@ -158,8 +159,10 @@ async def stream_proxy(websocket: WebSocket, session_id: str) -> None:
     settings: Settings = get_settings()
     await websocket.accept()
     upstream_url = f"{settings.gateway_asr_ws_url}/internal/stream/{session_id}"
+    logger.info("gateway_stream_proxy_connecting", extra={"session_id": session_id, "upstream_url": upstream_url})
     try:
         async with websockets.connect(upstream_url, max_size=None) as upstream:
+            logger.info("gateway_stream_proxy_connected", extra={"session_id": session_id, "upstream_url": upstream_url})
             async def client_to_upstream() -> None:
                 while True:
                     message = await websocket.receive_text()
@@ -171,8 +174,13 @@ async def stream_proxy(websocket: WebSocket, session_id: str) -> None:
 
             await asyncio.gather(client_to_upstream(), upstream_to_client())
     except WebSocketDisconnect:
+        logger.info("gateway_stream_proxy_disconnected", extra={"session_id": session_id})
         return
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "gateway_stream_proxy_failed",
+            extra={"session_id": session_id, "upstream_url": upstream_url, "error": repr(exc)},
+        )
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 

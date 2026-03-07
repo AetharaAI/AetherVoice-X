@@ -4,6 +4,7 @@ import json
 
 from fastapi import APIRouter, Header, Request, WebSocket, WebSocketDisconnect
 
+from ..logging import logger
 from ..schemas.requests import ASRStreamStartRequest, AudioFrame
 
 router = APIRouter(tags=["stream"])
@@ -29,6 +30,7 @@ async def start_stream(
 @router.websocket("/internal/stream/{session_id}")
 async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
+    logger.info("stream_websocket_accepted", extra={"session_id": session_id, "route": "/internal/stream"})
     try:
         while True:
             message = await websocket.receive_text()
@@ -50,4 +52,11 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                 )
                 break
     except WebSocketDisconnect:
+        logger.info("stream_websocket_disconnected", extra={"session_id": session_id, "route": "/internal/stream"})
         return
+    except Exception as exc:
+        logger.error(
+            "stream_websocket_failed",
+            extra={"session_id": session_id, "route": "/internal/stream", "error": repr(exc)},
+        )
+        raise
