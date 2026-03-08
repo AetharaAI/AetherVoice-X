@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 
 from fastapi import APIRouter, Header, Request, WebSocket, WebSocketDisconnect
 
@@ -52,3 +53,7 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                 break
     except WebSocketDisconnect:
         return
+    except Exception as exc:
+        with suppress(Exception):
+            await websocket.send_json({"type": "error", "session_id": session_id, "message": str(exc)})
+            await websocket.close(code=1011)

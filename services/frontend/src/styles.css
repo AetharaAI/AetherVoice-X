@@ -298,6 +298,13 @@ textarea, input, select, pre {
 .meta-card strong {
   display: block;
   margin-top: 0.45rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.meta-value-wrap {
+  font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .detail-card-header {
@@ -330,6 +337,114 @@ textarea, input, select, pre {
 .artifact-list, .segment-list {
   display: grid;
   gap: 0.75rem;
+}
+
+.stream-hero,
+.stream-output-shell {
+  margin-top: 1.1rem;
+  border-radius: 24px;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.stream-hero.default {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.stream-hero.warn {
+  background: linear-gradient(135deg, rgba(244, 185, 66, 0.12), rgba(86, 185, 255, 0.08));
+}
+
+.stream-hero.good {
+  background: linear-gradient(135deg, rgba(120, 211, 141, 0.14), rgba(86, 185, 255, 0.08));
+}
+
+.stream-hero.danger {
+  background: linear-gradient(135deg, rgba(255, 108, 97, 0.16), rgba(255, 255, 255, 0.03));
+}
+
+.stream-hero,
+.stream-output-header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.stream-hero-copy,
+.stream-output-header > div:first-child {
+  min-width: min(100%, 420px);
+}
+
+.stream-hero-copy h3,
+.stream-output-header h3 {
+  margin: 0.15rem 0 0.45rem;
+  font-size: 1.2rem;
+}
+
+.stream-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  flex: 1;
+  min-width: min(100%, 320px);
+}
+
+.status-chip {
+  padding: 0.85rem 0.9rem;
+  border-radius: 18px;
+  background: rgba(10, 13, 20, 0.34);
+  border: 1px solid var(--border);
+}
+
+.status-chip strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 1rem;
+}
+
+.stream-typewriter {
+  margin: 0;
+  min-height: 1.6rem;
+  color: #d9e6f3;
+  line-height: 1.55;
+}
+
+.stream-caret {
+  display: inline-block;
+  width: 0.55rem;
+  height: 1.05rem;
+  margin-left: 0.12rem;
+  vertical-align: -0.15rem;
+  background: transparent;
+}
+
+.stream-caret.active {
+  background: linear-gradient(180deg, var(--accent-cool), var(--accent));
+  animation: blink-caret 0.9s steps(1) infinite;
+}
+
+.stream-output-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border: 1px solid var(--border);
+  font-weight: 700;
 }
 
 .inline-code {
@@ -377,12 +492,34 @@ textarea, input, select, pre {
   padding: 1rem;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(86, 185, 255, 0.08), rgba(249, 115, 82, 0.06));
+  overflow: hidden;
 }
 
 .waveform span {
   width: 10px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--accent-cool), var(--accent));
+}
+
+.waveform.active span {
+  animation: waveform-pulse 1.15s ease-in-out infinite;
+  animation-delay: calc(var(--bar-index, 0) * 0.06s);
+}
+
+.waveform.good {
+  background: linear-gradient(180deg, rgba(120, 211, 141, 0.12), rgba(86, 185, 255, 0.08));
+}
+
+.waveform.good span {
+  background: linear-gradient(180deg, #86f0b1, var(--accent-cool));
+}
+
+.waveform.danger {
+  background: linear-gradient(180deg, rgba(255, 108, 97, 0.14), rgba(249, 115, 82, 0.08));
+}
+
+.waveform.danger span {
+  background: linear-gradient(180deg, #ffc0bb, var(--danger));
 }
 
 .triage-card {
@@ -420,6 +557,26 @@ textarea, input, select, pre {
   color: var(--danger);
 }
 
+@keyframes blink-caret {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes waveform-pulse {
+  0%, 100% {
+    transform: scaleY(0.92);
+    opacity: 0.82;
+  }
+  50% {
+    transform: scaleY(1.08);
+    opacity: 1;
+  }
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -436,5 +593,9 @@ textarea, input, select, pre {
 
   .content {
     padding: 1rem;
+  }
+
+  .stream-output-actions audio {
+    width: 100%;
   }
 }

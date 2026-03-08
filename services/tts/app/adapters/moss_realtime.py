@@ -63,7 +63,13 @@ class MossRealtimeAdapter(BaseTTSAdapter):
         if not self.base_url or self.client is None:
             raise RuntimeError("MOSS realtime upstream is not configured")
         response = await self.client.post(f"/v1/stream/{session_id}/text", json={"text": text})
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = response.text.strip()
+            if detail:
+                raise RuntimeError(f"MOSS realtime text push failed: {detail}") from exc
+            raise
         payload = response.json()
         events = payload.get("events")
         if not isinstance(events, list):

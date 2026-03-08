@@ -21,6 +21,7 @@ export function useTTSStream() {
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState(0);
+  const [lastSentChars, setLastSentChars] = useState(0);
   const [finalUrl, setFinalUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function useTTSStream() {
     setConnected(false);
     setSessionId(null);
     setChunkCount(0);
+    setLastSentChars(0);
     setFinalUrl(null);
     setEvents([]);
     setWsUrl(null);
@@ -117,10 +119,26 @@ export function useTTSStream() {
         appendEvent("websocket error");
       };
       socket.onmessage = (message) => {
-        const payload = JSON.parse(message.data) as { type: string; audio_b64?: string; metadata?: Record<string, string>; format?: string };
+        const payload = JSON.parse(message.data) as {
+          type: string;
+          audio_b64?: string;
+          metadata?: Record<string, string>;
+          format?: string;
+          message?: string;
+        };
+        if (payload.type === "error") {
+          const detail = payload.message || "TTS stream failed during generation.";
+          setError(detail);
+          setConnected(false);
+          setPhase("generation-error");
+          appendEvent(`generation failed · ${detail}`);
+          socket.close();
+          return;
+        }
         if (payload.type === "audio_chunk") {
           chunkCountRef.current += 1;
           setChunkCount(chunkCountRef.current);
+          setPhase("streaming-audio");
           appendEvent(`audio chunk ${chunkCountRef.current}`);
         }
         if (payload.type === "final_audio" && payload.audio_b64) {
@@ -155,6 +173,9 @@ export function useTTSStream() {
       setError("Stream is not open.");
       return;
     }
+    setError(null);
+    setLastSentChars(text.length);
+    setPhase("generating");
     socketRef.current.send(JSON.stringify({ type: "text_chunk", text }));
     appendEvent(`text chunk sent · ${text.length} chars`);
   }
@@ -171,5 +192,5 @@ export function useTTSStream() {
     setPhase("idle");
   }
 
-  return { connected, connectionLabel, sessionId, wsUrl, modelUsed, chunkCount, finalUrl, events, error, connect, send, stop };
+  return { connected, connectionLabel, sessionId, wsUrl, modelUsed, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop };
 }
