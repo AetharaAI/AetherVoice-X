@@ -3,6 +3,7 @@ FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
+ENV PYTHONPATH=/opt/MOSS-TTS/moss_tts_realtime
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
