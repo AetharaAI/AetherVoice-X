@@ -160,7 +160,7 @@ async def start_stream(
         raise HTTPException(status_code=exc.status_code if 400 <= exc.status_code < 500 else 503, detail=exc.detail) from exc
     return ASRStreamStartResponse(
         session_id=session_id,
-        ws_url=f"/ws/asr/stream/{session_id}",
+        ws_url=f"/api/v1/asr/stream/{session_id}",
         expires_in_seconds=result.get("expires_in_seconds", 3600),
         model_requested=payload.model,
         model_used=result.get("model_used", model_used),
@@ -168,6 +168,7 @@ async def start_stream(
     )
 
 
+@router.websocket("/api/v1/asr/stream/{session_id}")
 @router.websocket("/v1/asr/stream/{session_id}")
 @router.websocket("/ws/asr/stream/{session_id}")
 async def stream_proxy(websocket: WebSocket, session_id: str) -> None:
