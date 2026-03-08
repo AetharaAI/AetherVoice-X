@@ -79,10 +79,12 @@ async def start_tts_stream(
     internal_payload["model"] = model_used
     internal_payload["metadata"] = metadata
     await tts_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
-    return TTSStreamStartResponse(session_id=session_id, ws_url=f"/v1/tts/stream/{session_id}")
+    return TTSStreamStartResponse(session_id=session_id, ws_url=f"/api/v1/tts/stream/{session_id}")
 
 
+@router.websocket("/api/v1/tts/stream/{session_id}")
 @router.websocket("/v1/tts/stream/{session_id}")
+@router.websocket("/ws/tts/stream/{session_id}")
 async def tts_stream_proxy(websocket: WebSocket, session_id: str) -> None:
     settings: Settings = get_settings()
     await websocket.accept()
