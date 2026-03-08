@@ -9,10 +9,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/moss/requirements.txt /tmp/requirements.txt
-RUN python3 -m pip install --no-cache-dir --upgrade pip \
-    && python3 -m pip install --no-cache-dir -r /tmp/requirements.txt \
+RUN python3 -m pip install --no-cache-dir --break-system-packages --upgrade pip \
+    && python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
     && git clone --depth=1 https://github.com/OpenMOSS/MOSS-TTS.git /opt/MOSS-TTS \
-    && python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 -e "/opt/MOSS-TTS[torch-runtime]"
+    && python3 -m pip install --no-cache-dir --break-system-packages --extra-index-url https://download.pytorch.org/whl/cu128 -e "/opt/MOSS-TTS[torch-runtime]"
 
 COPY services/moss /app
 
