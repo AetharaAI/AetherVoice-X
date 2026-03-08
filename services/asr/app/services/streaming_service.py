@@ -26,8 +26,10 @@ class StreamingService:
         self.sessions: dict[str, dict] = {}
 
     async def start(self, request: ASRStreamStartRequest) -> dict:
-        allow_fallback = bool(request.metadata.extra.get("allow_stream_fallback", request.model == "auto"))
-        original_requested_model = str(request.metadata.extra.get("requested_model", request.model))
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        metadata_extra = metadata.get("extra") if isinstance(metadata.get("extra"), dict) else {}
+        allow_fallback = bool(metadata_extra.get("allow_stream_fallback", request.model == "auto"))
+        original_requested_model = str(metadata_extra.get("requested_model", request.model))
         try:
             adapter = self.registry.get(request.model)
         except KeyError:
