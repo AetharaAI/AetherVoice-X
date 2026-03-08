@@ -27,3 +27,6 @@
   - the container now starts with the model path as the command root instead of `sh -lc 'vllm serve ...'`
   - the Voxtral image now builds from `vllm/vllm-openai:nightly`
   - added env knobs for vLLM worker, logging, uvicorn log level, and API key to match the standalone model-runner pattern
+- Patched the current vLLM realtime websocket middleware bug seen on `vllm 0.17.0`:
+  - removed the stale `VLLM_USE_V1` env flag
+  - added a build-time hotfix in the Voxtral image so websocket scopes no longer crash on missing `scope["method"]`

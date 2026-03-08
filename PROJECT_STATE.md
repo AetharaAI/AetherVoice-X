@@ -26,6 +26,7 @@
   - not marked ready until `VOXTRAL_REALTIME_BASE_URL` and `VOXTRAL_REALTIME_WS_URL` are configured
   - explicit selection should now fail loudly instead of silently falling back
   - compose/runtime was updated to the current vLLM container entrypoint pattern where the command begins with the model path instead of wrapping `vllm serve`
+  - current blocker moved from model loading to the vLLM realtime websocket path; the image now includes a hotfix for the `scope["method"]` websocket crash seen on `vllm 0.17.0`
 - `moss_realtime`
   - still scaffolded
 
@@ -56,8 +57,9 @@
    - final latency
    - partial event cadence
    - transcript stability under real speech
-4. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
-5. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+4. Verify the Voxtral websocket hotfix by confirming the sidecar no longer throws `KeyError: 'method'` during `/v1/realtime` handshake.
+5. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
+6. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Suggested benchmark command
 
