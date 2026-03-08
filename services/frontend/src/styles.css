@@ -433,6 +433,19 @@ textarea, input, select, pre {
   flex-wrap: wrap;
 }
 
+.playback-placeholder {
+  min-width: 240px;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+.playback-placeholder strong {
+  display: block;
+  margin-top: 0.35rem;
+}
+
 .button-link {
   display: inline-flex;
   align-items: center;
@@ -445,6 +458,12 @@ textarea, input, select, pre {
   color: inherit;
   border: 1px solid var(--border);
   font-weight: 700;
+}
+
+.button-link.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: auto;
 }
 
 .inline-code {

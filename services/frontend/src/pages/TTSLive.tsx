@@ -279,15 +279,34 @@ export function TTSLive() {
             <div>
               <p className="eyebrow">Output surface</p>
               <h3>Operator playback and transport artifacts</h3>
+              <p className="field-hint">
+                The finalized WAV appears here after you click <strong>End stream</strong>. Live audio chunks can still play before that, but the
+                downloadable file is assembled at stream close.
+              </p>
             </div>
-            {finalUrl ? (
-              <div className="stream-output-actions">
+            <div className="stream-output-actions">
+              {finalUrl ? (
                 <audio controls src={finalUrl} />
-                <a className="button-link" href={finalUrl} download={`${sessionId ?? "tts-live"}.wav`}>
-                  Download WAV
-                </a>
-              </div>
-            ) : null}
+              ) : (
+                <div className="playback-placeholder">
+                  <span className="label">Playback deck</span>
+                  <strong>Waiting for final audio</strong>
+                </div>
+              )}
+              <a
+                className={`button-link ${finalUrl ? "" : "disabled"}`}
+                href={finalUrl ?? "#"}
+                download={`${sessionId ?? "tts-live"}.wav`}
+                aria-disabled={!finalUrl}
+                onClick={(event) => {
+                  if (!finalUrl) {
+                    event.preventDefault();
+                  }
+                }}
+              >
+                Download WAV
+              </a>
+            </div>
           </div>
           <WaveformPlaceholder
             chunks={Math.max(chunkCount, lastSentChars > 0 ? 1 : 0)}
