@@ -5,11 +5,13 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV PYTHONPATH=/opt/MOSS-TTS/moss_tts_realtime
 ENV PYTHONUNBUFFERED=1
+ENV CC=/usr/bin/gcc
+ENV CXX=/usr/bin/g++
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git ffmpeg \
+    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git ffmpeg build-essential \
     && python3 -m venv "${VIRTUAL_ENV}" \
     && rm -rf /var/lib/apt/lists/*
 
