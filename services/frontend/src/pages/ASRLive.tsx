@@ -7,9 +7,26 @@ import { formatMs } from "../lib/format";
 import { useASRStream } from "../hooks/useASRStream";
 
 export function ASRLive() {
-  const { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, finalSegments, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop } = useASRStream();
+  const {
+    connected,
+    sessionId,
+    modelUsed,
+    fallbackUsed,
+    partialText,
+    partialEventCount,
+    finalText,
+    finalSegments,
+    latencyLabel,
+    firstPartialMs,
+    finalMs,
+    framesSent,
+    error,
+    start,
+    stop,
+  } = useASRStream();
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [model, setModel] = useState("auto");
+  const transcriptChars = (finalText || partialText).length;
 
   return (
     <div className="page-grid">
@@ -43,7 +60,7 @@ export function ASRLive() {
           </div>
           <div className="meta-card">
             <span className="label">Partial count</span>
-            <strong>{partials.length}</strong>
+            <strong>{partialEventCount}</strong>
           </div>
           <div className="meta-card">
             <span className="label">Frames sent</span>
@@ -62,12 +79,18 @@ export function ASRLive() {
             <strong>{modelUsed ?? "pending"}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Final chars</span>
-            <strong>{finalText.length}</strong>
+            <span className="label">Transcript chars</span>
+            <strong>{transcriptChars}</strong>
           </div>
         </div>
-        <TranscriptPane partials={partials} finalText={finalText} finalSegments={finalSegments} />
+        <TranscriptPane
+          partialText={partialText}
+          partialEventCount={partialEventCount}
+          finalText={finalText}
+          finalSegments={finalSegments}
+        />
         <p className="muted">Model route: <strong>{model}</strong>. Auto will use the configured realtime lane when available and fall back if it is not ready.</p>
+        <p className="muted">Disconnect finalizes the active stream and waits for the backend to flush the last transcript window before the session is closed.</p>
         {fallbackUsed ? <p className="muted">Fallback was used for this stream start. The selected realtime lane was not available.</p> : null}
         {triageEnabled ? <p className="muted">Triage flag is being sent with the stream start request. Persisted classification will appear on the Sessions page once the backend lane records it.</p> : null}
         {error ? <p className="error-text">{error}</p> : null}

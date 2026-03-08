@@ -40,3 +40,7 @@
   - made disconnect graceful so `end_stream` can flush a final transcript before the browser closes the socket
   - normalized Voxtral delta assembly into readable transcript text
   - added final segment rendering to the live ASR page
+- Polished the live ASR operator surface without changing the backend stream contract:
+  - replaced duplicate cumulative partial rendering with one evolving transcript view
+  - persisted the last live ASR session snapshot in browser session storage so navigation no longer clears the result
+  - added quick-copy and transcript download actions to the live ASR transcript pane

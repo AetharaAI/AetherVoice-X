@@ -8,7 +8,7 @@
 - External model resource visibility: working on the Models page.
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
 - Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
-- Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console.
+- Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console and in the operator UI.
 
 ## Stable lanes
 
@@ -27,6 +27,8 @@
   - realtime websocket handshake is working through the gateway
   - partial transcripts are visible in the browser
   - disconnect now finalizes the stream instead of immediately tearing down the browser socket
+  - duplicate cumulative partial rendering has been removed at the UI layer in favor of one evolving transcript card
+  - the last live transcript snapshot now persists across page navigation in the browser session
   - current polishing target is structured final transcript quality and realtime output normalization
 - `moss_realtime`
   - still scaffolded
@@ -41,6 +43,7 @@
   - browser-measured time to first partial
   - browser-measured time to final transcript
   - final segment rendering when the stream flushes a final result
+  - quick-copy and transcript download actions
 - The file ASR page now supports explicit model selection for comparison runs.
 
 ## Immediate next steps
@@ -51,9 +54,10 @@
    - final latency
    - partial event cadence
    - transcript stability under real speech
-3. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready without needing the raw partial burst list.
-4. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
-5. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+3. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
+4. Add the same copy/download affordances to other text and audio result panes across the console.
+5. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
+6. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Suggested benchmark command
 

@@ -209,6 +209,35 @@ textarea, input, select, pre {
   gap: 0.75rem;
 }
 
+.transcript-actions,
+.transcript-footer {
+  display: inline-flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.compact-button {
+  padding: 0.6rem 0.8rem;
+  border-radius: 12px;
+}
+
+.transcript-document {
+  min-height: 180px;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(4, 7, 12, 0.65);
+  border: 1px solid var(--border);
+  overflow: auto;
+}
+
+.transcript-document p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}
+
 .meta-grid, .key-value-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

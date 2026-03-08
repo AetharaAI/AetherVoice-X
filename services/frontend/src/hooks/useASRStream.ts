@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from "react";
 
 import { startASRStream } from "../api/asr";
 
+const STORAGE_KEY = "aether.asr.live.v1";
+
+type TranscriptSegment = { start_ms?: number; end_ms?: number; text?: string };
+type PersistedStreamState = {
+  sessionId: string | null;
+  modelUsed: string | null;
+  fallbackUsed: boolean;
+  partialText: string;
+  partialEventCount: number;
+  finalText: string;
+  finalSegments: TranscriptSegment[];
+  latencyLabel: string;
+  firstPartialMs: number | null;
+  finalMs: number | null;
+  framesSent: number;
+  error: string | null;
+};
+
 function encodePcm16(samples: Float32Array) {
   const buffer = new ArrayBuffer(samples.length * 2);
   const view = new DataView(buffer);
@@ -29,9 +47,10 @@ export function useASRStream() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [fallbackUsed, setFallbackUsed] = useState(false);
-  const [partials, setPartials] = useState<string[]>([]);
+  const [partialText, setPartialText] = useState("");
+  const [partialEventCount, setPartialEventCount] = useState(0);
   const [finalText, setFinalText] = useState("");
-  const [finalSegments, setFinalSegments] = useState<Array<{ start_ms?: number; end_ms?: number; text?: string }>>([]);
+  const [finalSegments, setFinalSegments] = useState<TranscriptSegment[]>([]);
   const [latencyLabel, setLatencyLabel] = useState("idle");
   const [firstPartialMs, setFirstPartialMs] = useState<number | null>(null);
   const [finalMs, setFinalMs] = useState<number | null>(null);
@@ -56,6 +75,54 @@ export function useASRStream() {
     mediaRef.current = null;
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    try {
+      const persisted = JSON.parse(raw) as PersistedStreamState;
+      setSessionId(persisted.sessionId);
+      setModelUsed(persisted.modelUsed);
+      setFallbackUsed(persisted.fallbackUsed);
+      setPartialText(persisted.partialText);
+      setPartialEventCount(persisted.partialEventCount);
+      setFinalText(persisted.finalText);
+      setFinalSegments(persisted.finalSegments);
+      setLatencyLabel(persisted.latencyLabel);
+      setFirstPartialMs(persisted.firstPartialMs);
+      setFinalMs(persisted.finalMs);
+      setFramesSent(persisted.framesSent);
+      setError(persisted.error);
+    } catch {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const snapshot: PersistedStreamState = {
+      sessionId,
+      modelUsed,
+      fallbackUsed,
+      partialText,
+      partialEventCount,
+      finalText,
+      finalSegments,
+      latencyLabel,
+      firstPartialMs,
+      finalMs,
+      framesSent,
+      error,
+    };
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  }, [error, fallbackUsed, finalMs, finalSegments, finalText, firstPartialMs, framesSent, latencyLabel, modelUsed, partialEventCount, partialText, sessionId]);
+
   useEffect(() => () => void stop(), []);
 
   async function start(model = "auto", triageEnabled = false) {
@@ -64,7 +131,8 @@ export function useASRStream() {
       setSessionId(null);
       setModelUsed(null);
       setFallbackUsed(false);
-      setPartials([]);
+      setPartialText("");
+      setPartialEventCount(0);
       setFinalText("");
       setFinalSegments([]);
       setFirstPartialMs(null);
@@ -97,7 +165,8 @@ export function useASRStream() {
       socket.onmessage = (event) => {
         const payload = JSON.parse(event.data) as { type: string; text?: string; segments?: Array<{ start_ms?: number; end_ms?: number; text?: string }> };
         if (payload.type === "partial_transcript" && payload.text) {
-          setPartials((current) => [...current.slice(-4), payload.text as string]);
+          setPartialText(payload.text.trim());
+          setPartialEventCount((current) => current + 1);
           setLatencyLabel("partial");
           if (startedAtRef.current && !firstPartialRecordedRef.current) {
             firstPartialRecordedRef.current = true;
@@ -106,7 +175,9 @@ export function useASRStream() {
         }
         if (payload.type === "final_transcript" && payload.text) {
           finalReceivedRef.current = true;
-          setFinalText(payload.text);
+          const normalized = payload.text.trim();
+          setFinalText(normalized);
+          setPartialText(normalized);
           setFinalSegments(payload.segments ?? []);
           setLatencyLabel("final");
           if (startedAtRef.current) {
@@ -187,5 +258,21 @@ export function useASRStream() {
     setLatencyLabel("idle");
   }
 
-  return { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, finalSegments, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
+  return {
+    connected,
+    sessionId,
+    modelUsed,
+    fallbackUsed,
+    partialText,
+    partialEventCount,
+    finalText,
+    finalSegments,
+    latencyLabel,
+    firstPartialMs,
+    finalMs,
+    framesSent,
+    error,
+    start,
+    stop
+  };
 }
