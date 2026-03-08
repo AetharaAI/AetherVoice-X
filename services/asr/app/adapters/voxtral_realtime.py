@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from contextlib import suppress
 
 import httpx
@@ -34,6 +35,14 @@ def _derive_ws_url(base_url: str | None, ws_url: str | None) -> str:
     if not base_url:
         return ""
     return base_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+
+
+def _normalize_transcript_text(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    normalized = re.sub(r"\s+([,.;:!?])", r"\1", normalized)
+    normalized = re.sub(r"([,.;:!?])([A-Za-z0-9])", r"\1 \2", normalized)
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", normalized)
+    return normalized.strip()
 
 
 class VoxtralRealtimeAdapter(BaseASRAdapter):
@@ -195,7 +204,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                     delta = str(payload.get("delta", "")).strip()
                     if not delta:
                         continue
-                    state["partial_text"] = f"{state['partial_text']}{delta}".strip()
+                    state["partial_text"] = _normalize_transcript_text(f"{state['partial_text']} {delta}")
                     await queue.put(
                         {
                             "type": "partial_transcript",
@@ -364,7 +373,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         if state["error"] is not None:
             raise RuntimeError(f"Voxtral realtime upstream error: {state['error']}")
         payload = state["final_payload"] or {}
-        text = str(payload.get("text", "")).strip() or state["partial_text"]
+        text = _normalize_transcript_text(str(payload.get("text", "")).strip() or state["partial_text"])
         return ASRResult(
             request_id=f"{session_id}_voxtral_final",
             session_id=session_id,

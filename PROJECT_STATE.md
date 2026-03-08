@@ -8,7 +8,7 @@
 - External model resource visibility: working on the Models page.
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
 - Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
-- Live ASR observability: improved, but the next verification point is explicit Voxtral sidecar bring-up plus confirmed websocket traffic and microphone capture in the browser.
+- Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console.
 
 ## Stable lanes
 
@@ -23,12 +23,11 @@
 - `voxtral_realtime`
   - implemented as an upstream-backed adapter
   - now targets a vLLM realtime websocket upstream when configured
-  - not marked ready until `VOXTRAL_HTTP_BASE_URL` or `VOXTRAL_WS_BASE_URL` are configured
-  - explicit selection should now fail loudly instead of silently falling back
-  - compose/runtime was updated to the current vLLM container entrypoint pattern where the command begins with the model path instead of wrapping `vllm serve`
-  - current blocker moved from model loading to the vLLM realtime websocket path; the image now includes a hotfix for the `scope["method"]` websocket crash seen on `vllm 0.17.0`
-  - realtime auth is now explicitly wired for internal Docker traffic via `VOXTRAL_HTTP_BASE_URL`, `VOXTRAL_WS_BASE_URL`, and `VOXTRAL_API_KEY`
-  - temporary local fallback sends `Authorization: Bearer EMPTY` when no explicit key is configured and the sidecar still expects auth
+  - sidecar model load on GPU is verified
+  - realtime websocket handshake is working through the gateway
+  - partial transcripts are visible in the browser
+  - disconnect now finalizes the stream instead of immediately tearing down the browser socket
+  - current polishing target is structured final transcript quality and realtime output normalization
 - `moss_realtime`
   - still scaffolded
 
@@ -41,27 +40,20 @@
   - frames sent
   - browser-measured time to first partial
   - browser-measured time to final transcript
+  - final segment rendering when the stream flushes a final result
 - The file ASR page now supports explicit model selection for comparison runs.
 
 ## Immediate next steps
 
-1. Stand up or point to a Voxtral upstream and set:
-   - `VOXTRAL_HTTP_BASE_URL`
-   - `VOXTRAL_WS_BASE_URL`
-   - `VOXTRAL_REALTIME_MODEL_NAME`
-   - `VOXTRAL_API_KEY` if required
-   - `VOXTRAL_VLLM_WORKER_MULTIPROC_METHOD`
-   - `VOXTRAL_VLLM_LOGGING_LEVEL`
-   - `VOXTRAL_UVICORN_LOG_LEVEL`
-2. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
-3. Record timing notes for:
+1. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
+2. Record timing notes for:
    - first partial latency
    - final latency
    - partial event cadence
    - transcript stability under real speech
-4. Verify the Voxtral websocket hotfix by confirming the sidecar no longer throws `KeyError: 'method'` during `/v1/realtime` handshake.
-5. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
-6. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+3. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready without needing the raw partial burst list.
+4. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
+5. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Suggested benchmark command
 

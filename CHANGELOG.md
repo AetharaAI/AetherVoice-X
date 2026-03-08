@@ -35,3 +35,8 @@
   - ASR realtime now sends `Authorization: Bearer <key>` when configured
   - ASR realtime temporarily falls back to `Authorization: Bearer EMPTY` for local/internal Docker traffic when no key is configured
   - removed the premature realtime `input_audio_buffer.commit` before any audio frames were sent
+- Stabilized the first Voxtral end-to-end browser stream:
+  - switched the browser websocket path onto the working `/api/v1/...` gateway namespace
+  - made disconnect graceful so `end_stream` can flush a final transcript before the browser closes the socket
+  - normalized Voxtral delta assembly into readable transcript text
+  - added final segment rendering to the live ASR page

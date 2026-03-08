@@ -31,6 +31,7 @@ export function useASRStream() {
   const [fallbackUsed, setFallbackUsed] = useState(false);
   const [partials, setPartials] = useState<string[]>([]);
   const [finalText, setFinalText] = useState("");
+  const [finalSegments, setFinalSegments] = useState<Array<{ start_ms?: number; end_ms?: number; text?: string }>>([]);
   const [latencyLabel, setLatencyLabel] = useState("idle");
   const [firstPartialMs, setFirstPartialMs] = useState<number | null>(null);
   const [finalMs, setFinalMs] = useState<number | null>(null);
@@ -43,6 +44,17 @@ export function useASRStream() {
   const sequenceRef = useRef(0);
   const startedAtRef = useRef<number | null>(null);
   const firstPartialRecordedRef = useRef(false);
+  const endingRef = useRef(false);
+  const finalReceivedRef = useRef(false);
+
+  function cleanupMedia() {
+    processorRef.current?.disconnect();
+    contextRef.current?.close();
+    mediaRef.current?.getTracks().forEach((track) => track.stop());
+    processorRef.current = null;
+    contextRef.current = null;
+    mediaRef.current = null;
+  }
 
   useEffect(() => () => void stop(), []);
 
@@ -54,6 +66,7 @@ export function useASRStream() {
       setFallbackUsed(false);
       setPartials([]);
       setFinalText("");
+      setFinalSegments([]);
       setFirstPartialMs(null);
       setFinalMs(null);
       setFramesSent(0);
@@ -61,6 +74,8 @@ export function useASRStream() {
       sequenceRef.current = 0;
       startedAtRef.current = Date.now();
       firstPartialRecordedRef.current = false;
+      endingRef.current = false;
+      finalReceivedRef.current = false;
       const userMedia = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRef.current = userMedia;
       setLatencyLabel("starting-session");
@@ -80,7 +95,7 @@ export function useASRStream() {
       const socket = new WebSocket(resolveWsUrl(streamSession.ws_url));
       socketRef.current = socket;
       socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data) as { type: string; text?: string };
+        const payload = JSON.parse(event.data) as { type: string; text?: string; segments?: Array<{ start_ms?: number; end_ms?: number; text?: string }> };
         if (payload.type === "partial_transcript" && payload.text) {
           setPartials((current) => [...current.slice(-4), payload.text as string]);
           setLatencyLabel("partial");
@@ -90,20 +105,36 @@ export function useASRStream() {
           }
         }
         if (payload.type === "final_transcript" && payload.text) {
+          finalReceivedRef.current = true;
           setFinalText(payload.text);
+          setFinalSegments(payload.segments ?? []);
           setLatencyLabel("final");
           if (startedAtRef.current) {
             setFinalMs(Date.now() - startedAtRef.current);
           }
+          cleanupMedia();
+          socket.close();
         }
       };
       socket.onerror = () => {
         setError("WebSocket stream failed.");
-        setLatencyLabel("socket-error");
+        setLatencyLabel(endingRef.current ? "finalizing" : "socket-error");
         setConnected(false);
       };
       socket.onclose = () => {
         setConnected(false);
+        cleanupMedia();
+        socketRef.current = null;
+        if (endingRef.current && finalReceivedRef.current) {
+          setLatencyLabel("final");
+          endingRef.current = false;
+          return;
+        }
+        if (endingRef.current) {
+          setLatencyLabel("closed");
+          endingRef.current = false;
+          return;
+        }
         if (latencyLabel !== "final") {
           setLatencyLabel("closed");
         }
@@ -138,27 +169,23 @@ export function useASRStream() {
     } catch (err) {
       setError((err as Error).message);
       setLatencyLabel("error");
-      mediaRef.current?.getTracks().forEach((track) => track.stop());
-      mediaRef.current = null;
+      cleanupMedia();
       setConnected(false);
     }
   }
 
   function stop() {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      endingRef.current = true;
+      setLatencyLabel("finalizing");
       socketRef.current.send(JSON.stringify({ type: "end_stream" }));
-      socketRef.current.close();
+      return;
     }
-    processorRef.current?.disconnect();
-    contextRef.current?.close();
-    mediaRef.current?.getTracks().forEach((track) => track.stop());
-    processorRef.current = null;
-    contextRef.current = null;
-    mediaRef.current = null;
+    cleanupMedia();
     socketRef.current = null;
     setConnected(false);
     setLatencyLabel("idle");
   }
 
-  return { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
+  return { connected, sessionId, modelUsed, fallbackUsed, partials, finalText, finalSegments, latencyLabel, firstPartialMs, finalMs, framesSent, error, start, stop };
 }
