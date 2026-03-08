@@ -120,6 +120,56 @@ services:
               device_ids: ["${VOXTRAL_GPU_IDS:-2}"]
               capabilities: [gpu]
 
+  moss:
+    build:
+      context: .
+      dockerfile: services/moss/Dockerfile
+    profiles:
+      - moss
+    runtime: ${MOSS_CONTAINER_RUNTIME:-nvidia}
+    env_file: .env
+    ipc: host
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
+      MOSS_MODEL_ID: ${MOSS_MODEL_ID:-OpenMOSS-Team/MOSS-TTS-Realtime}
+      MOSS_MODEL_PATH: ${MOSS_MODEL_PATH}
+      MOSS_CODEC_MODEL_ID: ${MOSS_CODEC_MODEL_ID:-OpenMOSS-Team/MOSS-Audio-Tokenizer}
+      MOSS_CODEC_MODEL_PATH: ${MOSS_CODEC_MODEL_PATH:-}
+      MOSS_PROMPT_AUDIO_PATH: ${MOSS_PROMPT_AUDIO_PATH:-}
+      MOSS_REALTIME_DEVICE: ${MOSS_REALTIME_DEVICE:-cuda:0}
+      MOSS_REALTIME_ATTN_IMPLEMENTATION: ${MOSS_REALTIME_ATTN_IMPLEMENTATION:-auto}
+      MOSS_REALTIME_MAX_LENGTH: ${MOSS_REALTIME_MAX_LENGTH:-3000}
+      MOSS_REALTIME_SAMPLE_RATE: ${MOSS_REALTIME_SAMPLE_RATE:-24000}
+      MOSS_REALTIME_DECODE_CHUNK_FRAMES: ${MOSS_REALTIME_DECODE_CHUNK_FRAMES:-3}
+      MOSS_REALTIME_DECODE_OVERLAP_FRAMES: ${MOSS_REALTIME_DECODE_OVERLAP_FRAMES:-0}
+      MOSS_REALTIME_TEMPERATURE: ${MOSS_REALTIME_TEMPERATURE:-0.8}
+      MOSS_REALTIME_TOP_P: ${MOSS_REALTIME_TOP_P:-0.6}
+      MOSS_REALTIME_TOP_K: ${MOSS_REALTIME_TOP_K:-30}
+      MOSS_REALTIME_REPETITION_PENALTY: ${MOSS_REALTIME_REPETITION_PENALTY:-1.1}
+      MOSS_REALTIME_REPETITION_WINDOW: ${MOSS_REALTIME_REPETITION_WINDOW:-50}
+      MOSS_RUNTIME_PORT: ${MOSS_RUNTIME_PORT:-8021}
+      NVIDIA_VISIBLE_DEVICES: ${MOSS_GPU_IDS:-3}
+      NVIDIA_DRIVER_CAPABILITIES: ${MOSS_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${MOSS_HOST_PORT:-8013}:${MOSS_RUNTIME_PORT:-8021}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+      - ./:/workspace:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${MOSS_GPU_IDS:-3}"]
+              capabilities: [gpu]
+
   tts:
     build:
       context: .
@@ -134,6 +184,8 @@ services:
       TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
       AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
       MOSS_MODEL_PATH: ${MOSS_MODEL_PATH}
+      MOSS_REALTIME_BASE_URL: ${MOSS_REALTIME_BASE_URL:-http://moss:8021}
+      MOSS_REALTIME_TIMEOUT_SECONDS: ${MOSS_REALTIME_TIMEOUT_SECONDS:-180}
       CHATTERBOX_BASE_URL: ${CHATTERBOX_BASE_URL}
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${TTS_PORT}:${TTS_PORT}"

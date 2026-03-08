@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from ..schemas.requests import TTSRequest, TTSStreamStartRequest
-from ..schemas.responses import StreamSession, TTSResult
+from ..schemas.responses import StreamCompletion, StreamSession
 
 
 class BaseTTSAdapter(ABC):
@@ -24,5 +24,5 @@ class BaseTTSAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def end_stream(self, session_id: str) -> TTSResult:
+    async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         raise NotImplementedError

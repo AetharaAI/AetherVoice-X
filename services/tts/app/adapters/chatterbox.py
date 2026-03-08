@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 
 from .base import BaseTTSAdapter
 from ..schemas.requests import TTSRequest, TTSStreamStartRequest
-from ..schemas.responses import StreamSession, TTSResult
+from ..schemas.responses import StreamCompletion, StreamSession
 
 
 class ChatterboxAdapter(BaseTTSAdapter):
@@ -86,5 +86,5 @@ class ChatterboxAdapter(BaseTTSAdapter):
     async def push_text(self, session_id: str, text: str) -> list[dict]:
         raise NotImplementedError("Chatterbox streaming is not implemented; use micro-batch fallback")
 
-    async def end_stream(self, session_id: str) -> TTSResult:
+    async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         raise NotImplementedError("Chatterbox streaming is not implemented; use micro-batch fallback")

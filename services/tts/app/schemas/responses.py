@@ -12,6 +12,14 @@ class TimingBreakdown(BaseModel):
     total_ms: int = 0
 
 
+class StreamCompletion(BaseModel):
+    model_used: str
+    format: str = "wav"
+    duration_ms: int = 0
+    timings: TimingBreakdown = Field(default_factory=TimingBreakdown)
+    artifacts: dict[str, Any] = Field(default_factory=dict)
+
+
 class TTSResult(BaseModel):
     request_id: str
     model_used: str

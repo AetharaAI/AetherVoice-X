@@ -9,6 +9,7 @@
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
 - Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
 - Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console and in the operator UI.
+- Live TTS backend: OpenMOSS sidecar adapter path is now wired behind the existing `/v1/tts/stream/*` contract, with unit coverage for adapter-driven streaming and chatterbox fallback.
 
 ## Stable lanes
 
@@ -31,7 +32,11 @@
   - the last live transcript snapshot now persists across page navigation in the browser session
   - current polishing target is structured final transcript quality and realtime output normalization
 - `moss_realtime`
-  - still scaffolded
+  - adapter-driven realtime path implemented
+  - dedicated `moss` compose sidecar added behind `--profile moss`
+  - TTS service now prefers true adapter lifecycle over fake chunked batch synth when the sidecar is available
+  - fallback to chatterbox micro-batching remains in place when the sidecar is unavailable
+  - current blocker for end-to-end validation is first-time heavyweight OpenMOSS sidecar image bootstrap/runtime bring-up
 
 ## Operator notes
 
@@ -56,8 +61,9 @@
    - transcript stability under real speech
 3. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
 4. Add the same copy/download affordances to other text and audio result panes across the console.
-5. After Voxtral timings are stable, wire `moss_realtime` for live TTS.
-6. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+5. Finish first live bring-up for the `moss` sidecar and run browser/API TTS live checks.
+6. Record first-chunk latency and final-audio latency for `moss_realtime`.
+7. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Suggested benchmark command
 

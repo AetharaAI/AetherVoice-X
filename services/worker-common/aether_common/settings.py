@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     chatterbox_base_url: str = Field(default="http://localhost:8000", validation_alias=AliasChoices("CHATTERBOX_BASE_URL"))
     chatterbox_default_voice: str = Field(default="Emily.wav", validation_alias=AliasChoices("CHATTERBOX_DEFAULT_VOICE"))
     moss_model_id: str = Field(default="OpenMOSS-Team/MOSS-TTS-Realtime", validation_alias=AliasChoices("MOSS_MODEL_ID"))
+    moss_realtime_base_url: str | None = Field(default=None, validation_alias=AliasChoices("MOSS_REALTIME_BASE_URL", "MOSS_BASE_URL"))
+    moss_realtime_timeout_seconds: float = Field(default=120.0, validation_alias=AliasChoices("MOSS_REALTIME_TIMEOUT_SECONDS"))
 
     faster_whisper_model_path: str | None = Field(default=None, validation_alias=AliasChoices("FASTER_WHISPER_MODEL_PATH"))
     voxtral_model_path: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_MODEL_PATH"))
