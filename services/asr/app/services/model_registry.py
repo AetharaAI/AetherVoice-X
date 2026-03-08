@@ -12,10 +12,10 @@ class ModelRegistry:
     def __init__(self) -> None:
         settings = get_settings()
         voxtral = VoxtralRealtimeAdapter(
-            base_url=settings.voxtral_realtime_base_url,
-            ws_url=settings.voxtral_realtime_ws_url,
+            base_url=settings.voxtral_http_base_url,
+            ws_url=settings.voxtral_ws_base_url,
             model_name=settings.voxtral_realtime_model_name or settings.voxtral_model_id,
-            api_key=settings.voxtral_realtime_api_key,
+            api_key=settings.voxtral_api_key,
             partial_window_ms=settings.voxtral_stream_partial_window_ms,
             timeout_seconds=settings.voxtral_realtime_timeout_seconds,
         )

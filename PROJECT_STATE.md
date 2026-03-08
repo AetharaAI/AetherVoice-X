@@ -23,10 +23,12 @@
 - `voxtral_realtime`
   - implemented as an upstream-backed adapter
   - now targets a vLLM realtime websocket upstream when configured
-  - not marked ready until `VOXTRAL_REALTIME_BASE_URL` and `VOXTRAL_REALTIME_WS_URL` are configured
+  - not marked ready until `VOXTRAL_HTTP_BASE_URL` or `VOXTRAL_WS_BASE_URL` are configured
   - explicit selection should now fail loudly instead of silently falling back
   - compose/runtime was updated to the current vLLM container entrypoint pattern where the command begins with the model path instead of wrapping `vllm serve`
   - current blocker moved from model loading to the vLLM realtime websocket path; the image now includes a hotfix for the `scope["method"]` websocket crash seen on `vllm 0.17.0`
+  - realtime auth is now explicitly wired for internal Docker traffic via `VOXTRAL_HTTP_BASE_URL`, `VOXTRAL_WS_BASE_URL`, and `VOXTRAL_API_KEY`
+  - temporary local fallback sends `Authorization: Bearer EMPTY` when no explicit key is configured and the sidecar still expects auth
 - `moss_realtime`
   - still scaffolded
 
@@ -44,10 +46,10 @@
 ## Immediate next steps
 
 1. Stand up or point to a Voxtral upstream and set:
-   - `VOXTRAL_REALTIME_BASE_URL`
-   - `VOXTRAL_REALTIME_WS_URL`
+   - `VOXTRAL_HTTP_BASE_URL`
+   - `VOXTRAL_WS_BASE_URL`
    - `VOXTRAL_REALTIME_MODEL_NAME`
-   - `VOXTRAL_REALTIME_API_KEY` if required
+   - `VOXTRAL_API_KEY` if required
    - `VOXTRAL_VLLM_WORKER_MULTIPROC_METHOD`
    - `VOXTRAL_VLLM_LOGGING_LEVEL`
    - `VOXTRAL_UVICORN_LOG_LEVEL`

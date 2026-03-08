@@ -63,9 +63,9 @@ class Settings(BaseSettings):
     aether_model_root: str = Field(default="/models", validation_alias=AliasChoices("AETHER_MODEL_ROOT"))
 
     voxtral_model_id: str = Field(default="mistralai/Voxtral-Mini-4B-Realtime-2602", validation_alias=AliasChoices("VOXTRAL_MODEL_ID"))
-    voxtral_realtime_base_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_BASE_URL"))
-    voxtral_realtime_ws_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_WS_URL"))
-    voxtral_realtime_api_key: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_API_KEY"))
+    voxtral_http_base_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_HTTP_BASE_URL", "VOXTRAL_REALTIME_BASE_URL"))
+    voxtral_ws_base_url: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_WS_BASE_URL", "VOXTRAL_REALTIME_WS_URL"))
+    voxtral_api_key: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_API_KEY", "VOXTRAL_REALTIME_API_KEY"))
     voxtral_realtime_model_name: str | None = Field(default=None, validation_alias=AliasChoices("VOXTRAL_REALTIME_MODEL_NAME"))
     voxtral_realtime_timeout_seconds: float = Field(default=90.0, validation_alias=AliasChoices("VOXTRAL_REALTIME_TIMEOUT_SECONDS"))
     voxtral_stream_partial_window_ms: int = Field(default=480, validation_alias=AliasChoices("VOXTRAL_STREAM_PARTIAL_WINDOW_MS"))

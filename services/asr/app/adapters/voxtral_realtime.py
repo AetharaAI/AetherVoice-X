@@ -6,6 +6,7 @@ from contextlib import suppress
 
 import httpx
 import websockets
+from websockets.exceptions import InvalidStatus
 
 from .base import BaseASRAdapter
 from ..logging import logger
@@ -27,6 +28,14 @@ def _coerce_ms(value: object) -> int:
     return int(numeric * 1000)
 
 
+def _derive_ws_url(base_url: str | None, ws_url: str | None) -> str:
+    if ws_url:
+        return ws_url.rstrip("/")
+    if not base_url:
+        return ""
+    return base_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+
+
 class VoxtralRealtimeAdapter(BaseASRAdapter):
     name = "voxtral_realtime"
     supports_streaming = True
@@ -45,12 +54,12 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         timeout_seconds: float = 90.0,
     ) -> None:
         self.base_url = (base_url or "").rstrip("/")
-        self.ws_url = (ws_url or self.base_url.replace("https://", "wss://").replace("http://", "ws://")).rstrip("/")
+        self.ws_url = _derive_ws_url(self.base_url, ws_url)
         self.model_name = model_name
-        self.api_key = api_key
+        self.api_key = api_key.strip() if api_key and api_key.strip() else None
         self.partial_window_ms = partial_window_ms
-        self.ready = bool(self.base_url)
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.ready else None
+        self.ready = bool(self.base_url or self.ws_url)
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.base_url else None
         self._sessions: dict[str, dict] = {}
         logger.info(
             "voxtral_adapter_initialized",
@@ -60,16 +69,24 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "voxtral_ws_url": self.ws_url or "unset",
                 "voxtral_model_name": self.model_name,
                 "voxtral_partial_window_ms": self.partial_window_ms,
+                "voxtral_api_key_configured": bool(self.api_key),
             },
         )
 
-    def _headers(self) -> dict[str, str]:
+    def _http_headers(self) -> dict[str, str]:
         if not self.api_key:
             return {}
         return {"Authorization": f"Bearer {self.api_key}"}
 
+    def _realtime_headers(self) -> tuple[dict[str, str], bool]:
+        if self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}, False
+        # Temporary dev/local fallback for internal docker traffic when the
+        # sidecar is started with --api-key EMPTY and no explicit key is wired.
+        return {"Authorization": "Bearer EMPTY"}, True
+
     async def _transcribe_wav_bytes(self, request: ASRFileRequest, audio_bytes: bytes) -> ASRResult:
-        if not self.ready or self._client is None:
+        if not self.base_url or self._client is None:
             raise RuntimeError("Voxtral realtime upstream is not configured")
         started = __import__("time").perf_counter()
         logger.info(
@@ -95,7 +112,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         if request.timestamps:
             fields.append(("timestamp_granularities[]", "segment"))
         files = {"file": (f"{request.request_id}.wav", audio_bytes, "audio/wav")}
-        response = await self._client.post("/v1/audio/transcriptions", data=fields, files=files, headers=self._headers())
+        response = await self._client.post("/v1/audio/transcriptions", data=fields, files=files, headers=self._http_headers())
         if response.is_error:
             detail = response.text
             logger.error(
@@ -217,16 +234,46 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         return await self._transcribe_wav_bytes(request, audio_bytes)
 
     async def start_stream(self, request: ASRStreamStartRequest) -> StreamSession:
-        if not self.ready:
+        if not self.ws_url:
             raise RuntimeError("Voxtral realtime upstream is not configured")
-        websocket = await websockets.connect(
-            f"{self.ws_url}/v1/realtime",
-            max_size=None,
-            additional_headers=self._headers() or None,
+        headers, fallback_auth_used = self._realtime_headers()
+        ws_target = f"{self.ws_url}/v1/realtime"
+        auth_header_sent = "Authorization" in headers
+        logger.info(
+            "voxtral_ws_connecting",
+            extra={
+                "session_id": request.session_id,
+                "request_id": request.request_id,
+                "voxtral_ws_url": ws_target,
+                "auth_header_sent": auth_header_sent,
+                "api_key_configured": bool(self.api_key),
+                "fallback_auth_used": fallback_auth_used,
+            },
         )
+        try:
+            websocket = await websockets.connect(
+                ws_target,
+                max_size=None,
+                additional_headers=headers,
+            )
+        except InvalidStatus as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code in {401, 403}:
+                raise RuntimeError(
+                    f"Voxtral realtime websocket auth failed for {ws_target} "
+                    f"(auth_header_sent={auth_header_sent}, fallback_auth_used={fallback_auth_used})"
+                ) from exc
+            raise RuntimeError(
+                f"Voxtral realtime websocket handshake failed for {ws_target} "
+                f"(status={status_code}, auth_header_sent={auth_header_sent}, fallback_auth_used={fallback_auth_used})"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"Voxtral realtime websocket connect failed for {ws_target} "
+                f"(auth_header_sent={auth_header_sent}, fallback_auth_used={fallback_auth_used})"
+            ) from exc
         created = await self._recv_until(websocket, request.session_id, {"session.created"})
         await websocket.send(json.dumps({"type": "session.update", "model": self.model_name}))
-        await websocket.send(json.dumps({"type": "input_audio_buffer.commit"}))
         logger.info(
             "voxtral_stream_started",
             extra={
@@ -239,6 +286,8 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "sample_rate": request.sample_rate,
                 "channels": request.channels,
                 "upstream_session_id": created.get("id"),
+                "auth_header_sent": auth_header_sent,
+                "fallback_auth_used": fallback_auth_used,
             },
         )
         self._sessions[request.session_id] = {
