@@ -178,6 +178,50 @@ textarea, input, select, pre {
   flex-direction: column;
 }
 
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.field-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.field-group label {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.83rem;
+  letter-spacing: 0.04em;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.textarea-mono {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.range-row output {
+  min-width: 3.5rem;
+  text-align: right;
+  color: var(--accent-cool);
+  font-family: "IBM Plex Mono", monospace;
+}
+
 .switch {
   display: inline-flex;
   align-items: center;

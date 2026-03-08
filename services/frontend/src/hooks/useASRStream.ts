@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { startASRStream } from "../api/asr";
+import { resolveWsUrl } from "../api/client";
 
 const STORAGE_KEY = "aether.asr.live.v1";
 
@@ -28,18 +29,6 @@ function encodePcm16(samples: Float32Array) {
     view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
   }
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-}
-
-function resolveWsUrl(path: string): string {
-  if (/^wss?:\/\//.test(path)) {
-    return path;
-  }
-  const url = new URL(window.location.origin);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = path.startsWith("/") ? path : `/${path}`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
 }
 
 export function useASRStream() {
