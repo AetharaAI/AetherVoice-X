@@ -10,6 +10,7 @@ import { Sessions } from "./pages/Sessions";
 import { Triage } from "./pages/Triage";
 import { TTSFile } from "./pages/TTSFile";
 import { TTSLive } from "./pages/TTSLive";
+import { TTSStudio } from "./pages/TTSStudio";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/asr-file" element={<ASRFile />} />
         <Route path="/tts-live" element={<TTSLive />} />
         <Route path="/tts-file" element={<TTSFile />} />
+        <Route path="/tts-studio" element={<TTSStudio />} />
         <Route path="/triage" element={<Triage />} />
         <Route path="/sessions" element={<Sessions />} />
         <Route path="/models" element={<Models />} />

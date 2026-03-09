@@ -57,8 +57,10 @@ class RuntimeAssets:
     top_k: int
     repetition_penalty: float
     repetition_window: int
+    prefill_text_len: int
     decode_chunk_frames: int
     decode_overlap_frames: int
+    enable_compile: bool
     tokenizer: Any
     processor: Any
     model: Any
@@ -93,6 +95,13 @@ def _resolve_device() -> torch.device:
     if configured.startswith("cuda") and not torch.cuda.is_available():
         return torch.device("cpu")
     return torch.device(configured)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value in {None, ""}:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_dtype(device: torch.device) -> torch.dtype:
@@ -201,6 +210,8 @@ def _build_runtime() -> RuntimeAssets:
     sample_rate = _env_int("MOSS_REALTIME_SAMPLE_RATE", 24000)
     device = _resolve_device()
     dtype = _resolve_dtype(device)
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
     model_source = os.getenv("MOSS_MODEL_PATH") or os.getenv("MOSS_MODEL_ID") or "OpenMOSS-Team/MOSS-TTS-Realtime"
     codec_source = os.getenv("MOSS_CODEC_MODEL_PATH") or os.getenv("MOSS_CODEC_MODEL_ID") or "OpenMOSS-Team/MOSS-Audio-Tokenizer"
     attn_implementation = _resolve_attn_implementation(device, dtype)
@@ -238,8 +249,10 @@ def _build_runtime() -> RuntimeAssets:
         top_k=_env_int("MOSS_REALTIME_TOP_K", 30),
         repetition_penalty=_env_float("MOSS_REALTIME_REPETITION_PENALTY", 1.1),
         repetition_window=_env_int("MOSS_REALTIME_REPETITION_WINDOW", 50),
+        prefill_text_len=_env_int("MOSS_REALTIME_PREFILL_TEXT_LEN", min(getattr(processor, "delay_tokens_len", 12), 6)),
         decode_chunk_frames=_env_int("MOSS_REALTIME_DECODE_CHUNK_FRAMES", 3),
         decode_overlap_frames=_env_int("MOSS_REALTIME_DECODE_OVERLAP_FRAMES", 0),
+        enable_compile=_env_bool("MOSS_REALTIME_ENABLE_COMPILE", False),
         tokenizer=tokenizer,
         processor=processor,
         model=model,
@@ -285,13 +298,17 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         )
     inferencer = MossTTSRealtimeInference(runtime.model, runtime.tokenizer, max_length=runtime.max_length)
     inferencer.reset_generation_state(keep_cache=False)
+    if hasattr(inferencer, "_should_compile_local_transformer"):
+        inferencer._should_compile_local_transformer = runtime.enable_compile
+        if not runtime.enable_compile:
+            inferencer._compiled_local_transformer = None
     session = MossTTSRealtimeStreamingSession(
         inferencer,
         runtime.processor,
         codec=runtime.codec,
         codec_sample_rate=runtime.sample_rate,
         codec_encode_kwargs={},
-        prefill_text_len=runtime.processor.delay_tokens_len,
+        prefill_text_len=runtime.prefill_text_len,
         temperature=runtime.temperature,
         top_p=runtime.top_p,
         top_k=runtime.top_k,

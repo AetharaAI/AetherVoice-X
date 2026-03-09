@@ -49,7 +49,7 @@
 - GPUs: `4x NVIDIA L4`
 
 #### GPU allocation
-- `GPU0` - embeddings and reranker services
+- `GPU0` - current OpenMOSS realtime pilot lane during Voice Studio integration work
 - `GPU1` - security and experimental model lanes
 - `GPU2` - ASR service lane and related speech models
 - `GPU3` - Chatterbox TTS service lane
@@ -57,8 +57,26 @@
 #### Service responsibilities
 - Aether ASR server with standalone UI and API surface
 - Chatterbox TTS server with standalone UI and API surface
+- OpenMOSS realtime sidecar under active integration for the unified Voice Studio
+- Unified Aether Voice Studio surface with additive `TTS Studio` control plane now scaffolded in the repo
 - Audio infrastructure and routing experiments
 - GPU-aware service multiplexing and deployment control
+
+#### Current Voice Studio integration note
+- As of March 8, 2026:
+  - Voxtral realtime ASR is functioning in the unified console
+  - OpenMOSS realtime TTS is emitting chunk audio and finalized WAV artifacts through the unified console
+  - OpenMOSS realtime remains experimental due to prompt-shaping, voice-catalog, and latency-readiness concerns
+  - a new additive `TTS Studio` surface is now wired for voice registry, clone/design workflows, and provider-backed LLM routing configuration
+
+#### Canonical OpenMOSS model root
+- Voice Studio work now treats `/mnt/aetherpro/models/audio/OpenMOSS-Team` as the canonical OpenMOSS model root
+- Canonical subpaths expected by the current studio build include:
+  - `MOSS-TTS-Realtime`
+  - `MOSS-TTS`
+  - `MOSS-TTSD-v1.0`
+  - `MOSS-VoiceGenerator`
+  - `MOSS-Audio-Tokenizer`
 
 ### `C3-32` - Aether gateway and platform node
 - Role: gateway, control plane, VoiceOps, and voice agent product surfaces

@@ -11,9 +11,10 @@ from aether_common.telemetry import metrics_content_type, metrics_payload
 
 from .config import get_settings
 from .logging import logger
-from .routers import health, stream, synthesize
+from .routers import health, stream, studio, synthesize
 from .services.model_registry import ModelRegistry
 from .services.streaming_service import StreamingService
+from .services.studio_service import StudioService
 from .services.synthesis_service import SynthesisService
 from .services.telemetry_service import TelemetryService
 
@@ -35,11 +36,13 @@ async def lifespan(app: FastAPI):
     )
     storage.ensure_bucket(settings.s3_bucket_tts)
     registry = ModelRegistry()
+    studio_service = StudioService(settings)
     synthesis_service = SynthesisService(registry, storage, settings)
     app.state.db = db
     app.state.redis = redis
     app.state.storage = storage
     app.state.registry = registry
+    app.state.studio_service = studio_service
     app.state.synthesis_service = synthesis_service
     app.state.streaming_service = StreamingService(registry, synthesis_service, redis, TelemetryService(), storage, settings)
     logger.info("tts_started")
@@ -62,6 +65,7 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(synthesize.router)
 app.include_router(stream.router)
+app.include_router(studio.router)
 
 
 @app.get("/metrics", include_in_schema=False)

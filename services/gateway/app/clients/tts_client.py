@@ -33,3 +33,43 @@ class TTSClient:
         response = await self.client.post("/internal/stream/start", headers=headers, json=payload)
         response.raise_for_status()
         return response.json()
+
+    async def studio_overview(self, *, tenant_id: str) -> dict:
+        response = await self.client.get("/internal/studio/overview", headers={"X-Tenant-Id": tenant_id})
+        response.raise_for_status()
+        return response.json()
+
+    async def studio_voices(self, *, tenant_id: str) -> dict:
+        response = await self.client.get("/internal/studio/voices", headers={"X-Tenant-Id": tenant_id})
+        response.raise_for_status()
+        return response.json()
+
+    async def create_studio_voice(self, payload: dict, *, tenant_id: str) -> dict:
+        response = await self.client.post("/internal/studio/voices", headers={"X-Tenant-Id": tenant_id}, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def import_studio_voice(self, form: dict, files: dict, *, tenant_id: str) -> dict:
+        response = await self.client.post("/internal/studio/voices/import", headers={"X-Tenant-Id": tenant_id}, data=form, files=files)
+        response.raise_for_status()
+        return response.json()
+
+    async def studio_providers(self) -> dict:
+        response = await self.client.get("/internal/studio/providers")
+        response.raise_for_status()
+        return response.json()
+
+    async def studio_provider_models(self, provider: str) -> dict:
+        response = await self.client.get(f"/internal/studio/providers/{provider}/models")
+        response.raise_for_status()
+        return response.json()
+
+    async def studio_routing(self) -> dict:
+        response = await self.client.get("/internal/studio/routing")
+        response.raise_for_status()
+        return response.json()
+
+    async def save_studio_routing(self, payload: dict) -> dict:
+        response = await self.client.post("/internal/studio/routing", json=payload)
+        response.raise_for_status()
+        return response.json()

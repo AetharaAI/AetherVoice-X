@@ -6,6 +6,7 @@ const navItems = [
   ["ASR File", "/asr-file"],
   ["TTS Live", "/tts-live"],
   ["TTS File", "/tts-file"],
+  ["TTS Studio", "/tts-studio"],
   ["Triage", "/triage"],
   ["Sessions", "/sessions"],
   ["Models", "/models"],

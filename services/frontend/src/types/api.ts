@@ -135,3 +135,71 @@ export interface StreamStartResponse {
   model_used?: string | null;
   fallback_used?: boolean;
 }
+
+export interface StudioVoice {
+  voice_id: string;
+  display_name: string;
+  tenant_id?: string | null;
+  type: "preset" | "cloned" | "generated" | "imported" | "fallback";
+  source_model: string;
+  runtime_target: "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
+  reference_audio_path?: string | null;
+  reference_text?: string | null;
+  generation_prompt?: string | null;
+  sample_rate: number;
+  language: string;
+  tags: string[];
+  default_params: Record<string, unknown>;
+  notes?: string | null;
+}
+
+export interface StudioRouteDescriptor {
+  name: "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
+  label: string;
+  mode: "stream" | "batch" | "dialogue" | "voice-design";
+  status: "ready" | "configured" | "staged" | "missing";
+  model_path?: string | null;
+  notes?: string | null;
+  fallback_target?: string | null;
+}
+
+export interface LLMProviderSummary {
+  provider: "openai" | "openrouter" | "litellm" | "anthropic";
+  label: string;
+  enabled: boolean;
+  base_url?: string | null;
+  auth_configured: boolean;
+  notes?: string | null;
+}
+
+export interface LLMProviderModel {
+  id: string;
+  label: string;
+  provider: "openai" | "openrouter" | "litellm" | "anthropic";
+}
+
+export interface LLMRoutingConfig {
+  provider: "openai" | "openrouter" | "litellm" | "anthropic";
+  model?: string | null;
+  base_url?: string | null;
+  enabled: boolean;
+  mode: "manual" | "asr_llm_tts" | "shadow";
+  system_prompt?: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ExamplePreset {
+  title: string;
+  description: string;
+  tags: string[];
+  generation_prompt: string;
+}
+
+export interface StudioOverview {
+  routes: StudioRouteDescriptor[];
+  voices: StudioVoice[];
+  providers: LLMProviderSummary[];
+  routing: LLMRoutingConfig;
+  example_presets: ExamplePreset[];
+  canonical_model_root: string;
+}

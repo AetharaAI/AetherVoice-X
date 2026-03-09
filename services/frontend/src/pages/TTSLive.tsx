@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { fetchStudioVoices } from "../api/studio";
 import { fetchModels } from "../api/sessions";
 import { Badge } from "../components/common/Badge";
 import { Panel } from "../components/common/Panel";
 import { WaveformPlaceholder } from "../components/tts/WaveformPlaceholder";
 import { useTTSStream } from "../hooks/useTTSStream";
-import type { ModelInfo } from "../types/api";
-
-function composeStructuredText(tags: string, body: string) {
-  return [tags.trim(), body.trim()].filter(Boolean).join("\n");
-}
+import type { ModelInfo, StudioVoice } from "../types/api";
 
 function formatConnectionLabel(value: string) {
   return value.replace(/-/g, " ");
@@ -70,12 +67,12 @@ function statusMessage(value: string, hasFinalAudio: boolean, sessionId: string 
     return "Finalizing the session and waiting for the completed audio asset.";
   }
   if (value === "open") {
-    return `WebSocket open for ${sessionId ?? "pending session"}. Send structured text to trigger synthesis.`;
+    return `WebSocket open for ${sessionId ?? "pending session"}. Send plain spoken text to trigger synthesis.`;
   }
   if (value === "starting" || value === "opening-socket") {
     return "Bringing the gateway, TTS service, and realtime sidecar into the same session contract.";
   }
-  return "Start a stream, send structured text, and keep the lane open long enough to receive the final audio response.";
+  return "Start a stream, choose a voice preset, and send plain spoken text into the live lane.";
 }
 
 function TypewriterStatus({ text, active }: { text: string; active: boolean }) {
@@ -110,23 +107,49 @@ function TypewriterStatus({ text, active }: { text: string; active: boolean }) {
 export function TTSLive() {
   const { connected, connectionLabel, sessionId, wsUrl, modelUsed, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop } = useTTSStream();
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [voices, setVoices] = useState<StudioVoice[]>([]);
   const [model, setModel] = useState("moss_realtime");
-  const [voiceMode, setVoiceMode] = useState("default");
-  const [customVoice, setCustomVoice] = useState("");
-  const [tagBlock, setTagBlock] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
-  const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
+  const [voiceId, setVoiceId] = useState("moss_default");
+  const [sessionProfile, setSessionProfile] = useState("telephony");
+  const [tone, setTone] = useState("warm");
+  const [cadence, setCadence] = useState("telephony");
+  const [speakingStyle, setSpeakingStyle] = useState("service");
+  const [latencyMode, setLatencyMode] = useState("low_latency");
   const [sampleRate, setSampleRate] = useState(24000);
-  const structuredText = useMemo(() => composeStructuredText(tagBlock, bodyText), [tagBlock, bodyText]);
-  const resolvedVoice = voiceMode === "custom" ? customVoice.trim() || "default" : "default";
+  const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
+  const [rawDirectives, setRawDirectives] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
   const liveModels = models.filter((entry) => entry.kind === "tts" && entry.supports_streaming);
+  const liveVoices = voices.filter((voice) => voice.runtime_target === "moss_realtime" || voice.runtime_target === "chatterbox");
+  const selectedVoice = liveVoices.find((voice) => voice.voice_id === voiceId) ?? liveVoices[0] ?? null;
   const hasFinalAudio = Boolean(finalUrl);
   const liveTone = connectionTone(connectionLabel, hasFinalAudio);
-  const busy = connected || connectionLabel === "starting" || connectionLabel === "opening-socket" || connectionLabel === "generating" || connectionLabel === "streaming-audio" || connectionLabel === "finalizing";
+  const busy =
+    connected ||
+    connectionLabel === "starting" ||
+    connectionLabel === "opening-socket" ||
+    connectionLabel === "generating" ||
+    connectionLabel === "streaming-audio" ||
+    connectionLabel === "finalizing";
+  const realtimeProfile = useMemo(
+    () => ({
+      voice_preset_id: selectedVoice?.voice_id ?? "moss_default",
+      session_profile: sessionProfile,
+      tone,
+      cadence,
+      speaking_style: speakingStyle,
+      latency_mode: latencyMode,
+      raw_directives: rawDirectives
+    }),
+    [cadence, latencyMode, rawDirectives, selectedVoice?.voice_id, sessionProfile, speakingStyle, tone]
+  );
 
   useEffect(() => {
     fetchModels()
       .then((payload) => setModels(payload))
       .catch(() => setModels([]));
+    fetchStudioVoices()
+      .then((payload) => setVoices(payload))
+      .catch(() => setVoices([]));
   }, []);
 
   useEffect(() => {
@@ -134,6 +157,12 @@ export function TTSLive() {
       setModel(liveModels[0].name);
     }
   }, [liveModels, model]);
+
+  useEffect(() => {
+    if (liveVoices.length > 0 && !liveVoices.some((voice) => voice.voice_id === voiceId)) {
+      setVoiceId(liveVoices[0].voice_id);
+    }
+  }, [liveVoices, voiceId]);
 
   return (
     <div className="page-grid">
@@ -143,19 +172,25 @@ export function TTSLive() {
             onClick={() =>
               connect({
                 model,
-                voice: resolvedVoice,
+                voice: selectedVoice?.voice_id ?? "default",
                 sampleRate,
                 format: "wav",
                 contextMode: "conversation",
-                metadata: { source: "console", lane: "tts_live" },
+                metadata: {
+                  source: "console",
+                  extra: {
+                    lane: "tts_live",
+                    realtime_profile: realtimeProfile
+                  }
+                }
               })
             }
             disabled={connected}
           >
             Start stream
           </button>
-          <button onClick={() => send(structuredText)} disabled={!connected || !structuredText.trim()}>
-            Send structured text
+          <button onClick={() => send(bodyText.trim())} disabled={!connected || !bodyText.trim()}>
+            Send text
           </button>
           <button onClick={stop} disabled={!connected} className="secondary">
             End stream
@@ -171,7 +206,7 @@ export function TTSLive() {
           <div className="stream-hero-metrics">
             <div className="status-chip">
               <span className="label">Payload</span>
-              <strong>{lastSentChars || structuredText.trim().length} chars</strong>
+              <strong>{lastSentChars || bodyText.trim().length} chars</strong>
             </div>
             <div className="status-chip">
               <span className="label">Chunks</span>
@@ -197,30 +232,73 @@ export function TTSLive() {
                 <option value="moss_realtime">moss_realtime</option>
               )}
             </select>
-            <p className="field-hint">This lane should stay pointed at the realtime model for live agent turn-taking.</p>
+            <p className="field-hint">Keep this lane on the realtime route for live agent turn-taking. Wider studio workflows belong in TTS Studio.</p>
           </div>
           <div className="field-group">
-            <label htmlFor="tts-live-voice-mode">Voice</label>
-            <select id="tts-live-voice-mode" value={voiceMode} onChange={(event) => setVoiceMode(event.target.value)} disabled={connected}>
-              <option value="default">Default voice</option>
-              <option value="custom">Custom voice id</option>
+            <label htmlFor="tts-live-voice">Voice preset</label>
+            <select id="tts-live-voice" value={selectedVoice?.voice_id ?? voiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={connected}>
+              {liveVoices.length ? (
+                liveVoices.map((voice) => (
+                  <option key={voice.voice_id} value={voice.voice_id}>
+                    {voice.display_name}
+                  </option>
+                ))
+              ) : (
+                <option value="moss_default">MOSS Default Voice</option>
+              )}
             </select>
-            {voiceMode === "custom" ? (
-              <input
-                value={customVoice}
-                onChange={(event) => setCustomVoice(event.target.value)}
-                placeholder="voice id or prompt-conditioned alias"
-                disabled={connected}
-              />
-            ) : null}
-            <p className="field-hint">OpenMOSS realtime is effectively single-voice today unless you add custom conditioning on the server side.</p>
+            <p className="field-hint">This binds a registry voice record to the session instead of prepending pseudo-tags into the spoken text.</p>
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-sample-rate">Sample rate</label>
             <select id="tts-live-sample-rate" value={sampleRate} onChange={(event) => setSampleRate(Number(event.target.value))} disabled={connected}>
               <option value={24000}>24000 Hz</option>
             </select>
-            <p className="field-hint">Realtime lane is pinned to the model-native sample rate right now.</p>
+            <p className="field-hint">Realtime stays pinned to the model-native sample rate for now.</p>
+          </div>
+        </div>
+        <div className="control-grid">
+          <div className="field-group">
+            <label htmlFor="tts-live-profile">Session profile</label>
+            <select id="tts-live-profile" value={sessionProfile} onChange={(event) => setSessionProfile(event.target.value)} disabled={connected}>
+              <option value="telephony">Telephony</option>
+              <option value="assistant">Assistant</option>
+              <option value="narration">Narration</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label htmlFor="tts-live-tone">Tone</label>
+            <select id="tts-live-tone" value={tone} onChange={(event) => setTone(event.target.value)} disabled={connected}>
+              <option value="warm">warm</option>
+              <option value="calm">calm</option>
+              <option value="neutral">neutral</option>
+              <option value="confident">confident</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label htmlFor="tts-live-cadence">Cadence</label>
+            <select id="tts-live-cadence" value={cadence} onChange={(event) => setCadence(event.target.value)} disabled={connected}>
+              <option value="telephony">telephony</option>
+              <option value="conversational">conversational</option>
+              <option value="measured">measured</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label htmlFor="tts-live-style">Speaking style</label>
+            <select id="tts-live-style" value={speakingStyle} onChange={(event) => setSpeakingStyle(event.target.value)} disabled={connected}>
+              <option value="service">service</option>
+              <option value="dispatcher">dispatcher</option>
+              <option value="support">support</option>
+              <option value="narrator">narrator</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label htmlFor="tts-live-latency">Latency profile</label>
+            <select id="tts-live-latency" value={latencyMode} onChange={(event) => setLatencyMode(event.target.value)} disabled={connected}>
+              <option value="low_latency">low latency</option>
+              <option value="balanced">balanced</option>
+              <option value="quality">quality</option>
+            </select>
           </div>
         </div>
         <div className="meta-grid">
@@ -233,6 +311,10 @@ export function TTSLive() {
             <strong>{sessionId ?? "none"}</strong>
           </div>
           <div className="meta-card">
+            <span className="label">Voice binding</span>
+            <strong>{selectedVoice?.display_name ?? "MOSS Default Voice"}</strong>
+          </div>
+          <div className="meta-card">
             <span className="label">Route target</span>
             <strong>{modelUsed ?? model}</strong>
           </div>
@@ -241,38 +323,37 @@ export function TTSLive() {
             <strong>{chunkCount}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Final audio</span>
-            <strong>{finalUrl ? "ready" : "pending"}</strong>
-          </div>
-          <div className="meta-card">
             <span className="label">WebSocket contract</span>
             <strong className="meta-value-wrap">{wsUrl ?? "pending"}</strong>
           </div>
         </div>
         <div className="control-grid">
           <div className="field-group">
-            <label htmlFor="tts-live-tags">Structured tags / directives</label>
-            <textarea
-              id="tts-live-tags"
-              className="textarea-mono"
-              value={tagBlock}
-              onChange={(event) => setTagBlock(event.target.value)}
-              rows={4}
-              placeholder="<agent tone=&quot;warm&quot; />"
-            />
-            <p className="field-hint">These lines are inserted verbatim ahead of the spoken body so you can test telephony-style prompt tags.</p>
-          </div>
-          <div className="field-group">
             <label htmlFor="tts-live-body">Spoken body</label>
             <textarea
               id="tts-live-body"
               value={bodyText}
               onChange={(event) => setBodyText(event.target.value)}
-              rows={4}
+              rows={5}
               placeholder="Write the response your agent should say."
             />
-            <p className="field-hint">Send text keeps the stream open. End stream asks the backend for final audio and waits for the last response frame.</p>
+            <p className="field-hint">Only the spoken body is sent into the realtime utterance. Session profile and style controls ride in backend state.</p>
           </div>
+          <details className="accordion">
+            <summary>Experimental raw directives</summary>
+            <div className="accordion-body">
+              <label htmlFor="tts-live-raw-directives">Unsupported passthrough notes</label>
+              <textarea
+                id="tts-live-raw-directives"
+                className="textarea-mono"
+                value={rawDirectives}
+                onChange={(event) => setRawDirectives(event.target.value)}
+                rows={4}
+                placeholder="<agent tone=&quot;warm&quot; cadence=&quot;telephony&quot; />"
+              />
+              <p className="field-hint">These directives are preserved in metadata for operator debugging only. They are no longer prepended into spoken text.</p>
+            </div>
+          </details>
         </div>
         <section className="stream-output-shell">
           <div className="stream-output-header">
@@ -321,7 +402,7 @@ export function TTSLive() {
             ))}
           </div>
         </section>
-        <p className="muted">Primary use case: push structured response text from your reasoning layer into this open stream and let the telephony agent speak it back with minimal ceremony.</p>
+        <p className="muted">Primary use case: keep the stream open, bind a voice preset to the session, and push plain assistant text from your reasoning layer with minimal operator ceremony.</p>
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>
     </div>

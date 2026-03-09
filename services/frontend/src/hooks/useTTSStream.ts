@@ -29,6 +29,8 @@ export function useTTSStream() {
   const [wsUrl, setWsUrl] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const nextPlaybackTimeRef = useRef(0);
   const chunkCountRef = useRef(0);
   const finalUrlRef = useRef<string | null>(null);
   const phaseRef = useRef("idle");
@@ -49,9 +51,44 @@ export function useTTSStream() {
     }
   }
 
+  async function ensureAudioContext(): Promise<AudioContext | null> {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const Context = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) {
+      return null;
+    }
+    if (!audioContextRef.current) {
+      audioContextRef.current = new Context();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume();
+    }
+    return audioContextRef.current;
+  }
+
+  async function playChunkAudio(payload: string) {
+    const context = await ensureAudioContext();
+    if (!context) {
+      return;
+    }
+    const bytes = b64ToBytes(payload);
+    const chunkBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const decoded = await context.decodeAudioData(chunkBuffer.slice(0));
+    const source = context.createBufferSource();
+    source.buffer = decoded;
+    source.connect(context.destination);
+    const now = context.currentTime + 0.03;
+    const startAt = Math.max(now, nextPlaybackTimeRef.current);
+    source.start(startAt);
+    nextPlaybackTimeRef.current = startAt + decoded.duration;
+  }
+
   function resetForNewSession() {
     revokeFinalUrl();
     chunkCountRef.current = 0;
+    nextPlaybackTimeRef.current = 0;
     setConnected(false);
     setSessionId(null);
     setChunkCount(0);
@@ -82,6 +119,10 @@ export function useTTSStream() {
     () => () => {
       closeSocket(true);
       revokeFinalUrl();
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
     },
     []
   );
@@ -92,6 +133,7 @@ export function useTTSStream() {
       setError(null);
       resetForNewSession();
       setPhase("starting");
+      await ensureAudioContext();
       const session = await startTTSStream({
         model: options.model,
         voice: options.voice,
@@ -140,6 +182,9 @@ export function useTTSStream() {
           setChunkCount(chunkCountRef.current);
           setPhase("streaming-audio");
           appendEvent(`audio chunk ${chunkCountRef.current}`);
+          if (payload.audio_b64) {
+            void playChunkAudio(payload.audio_b64);
+          }
         }
         if (payload.type === "final_audio" && payload.audio_b64) {
           const bytes = b64ToBytes(payload.audio_b64);
@@ -176,6 +221,7 @@ export function useTTSStream() {
     setError(null);
     setLastSentChars(text.length);
     setPhase("generating");
+    void ensureAudioContext();
     socketRef.current.send(JSON.stringify({ type: "text_chunk", text }));
     appendEvent(`text chunk sent · ${text.length} chars`);
   }

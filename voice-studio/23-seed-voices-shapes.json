@@ -1,0 +1,291 @@
+{
+  "version": "1.0",
+  "seed_library": {
+    "voices": [
+      {
+        "voice_id": "seed_warm_dispatcher_female",
+        "display_name": "Warm Female Dispatcher",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_realtime",
+        "prompt": "Warm, calm American female dispatcher voice with clear enunciation, telephony-friendly pacing, and reassuring authority.",
+        "tags": ["warm", "dispatcher", "telephony", "support"],
+        "suggested_use_cases": ["live_agents", "voiceops", "call_routing"],
+        "demo_sample_text": "Thank you for calling. A technician is being dispatched to your location now.",
+        "default_style": {
+          "tone": "warm",
+          "cadence": "telephony",
+          "latency_mode": "fast"
+        }
+      },
+      {
+        "voice_id": "seed_calm_documentary_narrator",
+        "display_name": "Calm Documentary Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Calm, steady mid-range narrator voice with documentary pacing, clean diction, and a polished professional tone.",
+        "tags": ["narrator", "documentary", "calm", "polished"],
+        "suggested_use_cases": ["narration", "docuseries", "history_content"],
+        "demo_sample_text": "Across the desert plain, the last relay station opened at noon under a pale blue sky.",
+        "default_style": {
+          "quality_profile": "studio"
+        }
+      },
+      {
+        "voice_id": "seed_gritty_field_technician",
+        "display_name": "Gritty Field Technician",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Grounded working-class male voice with slight rasp, practical delivery, calm confidence, and no theatrical exaggeration.",
+        "tags": ["technician", "gritty", "practical", "field-service"],
+        "suggested_use_cases": ["training", "service_content", "industrial_media"],
+        "demo_sample_text": "Kill power at the panel first, verify the line is dead, then start tracing the fault.",
+        "default_style": {
+          "quality_profile": "studio"
+        }
+      },
+      {
+        "voice_id": "seed_noir_detective_monologue",
+        "display_name": "Noir Detective Monologue",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Low, dramatic noir detective voice with controlled grit, deliberate pacing, and late-night monologue energy.",
+        "tags": ["noir", "detective", "dramatic", "monologue"],
+        "suggested_use_cases": ["creative_content", "dialogue_demo", "storytelling"],
+        "demo_sample_text": "By the time I reached the station, the rain had already washed the city clean of excuses."
+      },
+      {
+        "voice_id": "seed_stoic_philosophical_narrator",
+        "display_name": "Stoic Philosophical Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Deep, reflective narrator voice with stoic restraint, calm authority, contemplative pacing, and a philosophical tone.",
+        "tags": ["stoic", "reflective", "philosophical", "narrator"],
+        "suggested_use_cases": ["self_mastery", "philosophy_content", "long_form_narration"],
+        "demo_sample_text": "The mind suffers more from imagination than from reality, and yet it is imagination that can also set it free."
+      },
+      {
+        "voice_id": "seed_motivational_discipline_coach",
+        "display_name": "Motivational Discipline Coach",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Focused, disciplined motivational voice with controlled intensity, emotional steadiness, and strong, clear delivery.",
+        "tags": ["motivational", "disciplined", "coach", "focused"],
+        "suggested_use_cases": ["motivation", "creator_content", "coaching_media"],
+        "demo_sample_text": "You do not need perfect conditions. You need the discipline to move before the conditions become perfect."
+      },
+      {
+        "voice_id": "seed_scientific_abstract_reader",
+        "display_name": "Scientific Abstract Reader",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Neutral, precise, articulate voice for reading scientific or technical content with minimal drama and high clarity.",
+        "tags": ["technical", "scientific", "neutral", "precise"],
+        "suggested_use_cases": ["research", "technical_docs", "science_content"],
+        "demo_sample_text": "The proposed architecture improves latency by decoupling retrieval, orchestration, and synthesis into independent subsystems."
+      },
+      {
+        "voice_id": "seed_childrens_story_narrator",
+        "display_name": "Children's Story Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Gentle, expressive storyteller voice with warmth, clarity, and playful but controlled energy suitable for children’s stories.",
+        "tags": ["children", "storyteller", "warm", "expressive"],
+        "suggested_use_cases": ["children_content", "storytelling", "educational_media"],
+        "demo_sample_text": "At the edge of the whispering forest, a tiny lantern flickered to life beside the old blue bridge."
+      },
+      {
+        "voice_id": "seed_fairytale_villain_monologue",
+        "display_name": "Fairy Tale Villain Monologue",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Elegant theatrical villain voice with controlled menace, articulate diction, and dramatic storytelling presence.",
+        "tags": ["villain", "theatrical", "fantasy", "dramatic"],
+        "suggested_use_cases": ["fantasy_content", "dialogue_demo", "creative_media"],
+        "demo_sample_text": "You thought the forest feared the storm. No, child. The forest learned the storm from me."
+      },
+      {
+        "voice_id": "seed_conspiracy_podcast_host",
+        "display_name": "Conspiracy Podcast Host",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Fast, energetic late-night podcast host voice with curiosity, edge, and slightly dramatic investigative tension.",
+        "tags": ["podcast", "conspiracy", "energetic", "investigative"],
+        "suggested_use_cases": ["podcasts", "creator_content", "entertainment"],
+        "demo_sample_text": "Tonight we’re looking at the question nobody in the official report seems willing to answer."
+      },
+      {
+        "voice_id": "seed_nature_documentary_host",
+        "display_name": "Nature Documentary Host",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Measured, immersive narrator voice with calm wonder, descriptive richness, and cinematic nature-documentary pacing.",
+        "tags": ["nature", "cinematic", "calm", "narrator"],
+        "suggested_use_cases": ["nature_docs", "cinematic_content", "educational_media"],
+        "demo_sample_text": "As the first light crosses the canyon floor, the desert begins the quiet work of waking."
+      },
+      {
+        "voice_id": "seed_overworked_parent_storyteller",
+        "display_name": "Overworked Parent Bedtime Storyteller",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Tired but loving storyteller voice with soft warmth, real human imperfection, and comforting late-night pacing.",
+        "tags": ["bedtime", "parent", "warm", "intimate"],
+        "suggested_use_cases": ["bedtime_content", "storytelling", "family_media"],
+        "demo_sample_text": "The little ship blinked its lights twice, took a deep breath, and sailed right into the stars."
+      },
+      {
+        "voice_id": "seed_corporate_explainer_presenter",
+        "display_name": "Corporate Explainer Presenter",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Clear, neutral business presenter voice with professional polish, moderate pacing, and trustworthy delivery for explainers.",
+        "tags": ["corporate", "explainer", "clear", "professional"],
+        "suggested_use_cases": ["product_demos", "enterprise_content", "training"],
+        "demo_sample_text": "This workflow reduces manual routing overhead while preserving operator control and auditability."
+      },
+      {
+        "voice_id": "seed_luxury_brand_narrator",
+        "display_name": "Luxury Brand Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Smooth, refined premium narrator voice with restrained elegance, slow confidence, and upscale commercial tone.",
+        "tags": ["luxury", "premium", "refined", "commercial"],
+        "suggested_use_cases": ["ads", "brand_content", "commercial_media"],
+        "demo_sample_text": "Designed without compromise, every line exists to turn quiet precision into felt experience."
+      },
+      {
+        "voice_id": "seed_blue_collar_training_instructor",
+        "display_name": "Blue-Collar Training Instructor",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Experienced trades instructor voice with patient authority, practical clarity, and no-nonsense explanation style.",
+        "tags": ["trades", "instructor", "practical", "authoritative"],
+        "suggested_use_cases": ["trades_training", "field_guides", "industrial_education"],
+        "demo_sample_text": "Before you pull the cover, verify lockout, confirm your meter, and never trust a dead label."
+      },
+      {
+        "voice_id": "seed_tactical_operations_brief",
+        "display_name": "Tactical Operations Brief",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Controlled, concise operations voice with mission-focused pacing, clear commands, and low emotional variance.",
+        "tags": ["tactical", "operations", "brief", "controlled"],
+        "suggested_use_cases": ["ops_briefs", "security_content", "simulations"],
+        "demo_sample_text": "Primary objective is secure ingress through the east corridor. Maintain comms discipline and confirm checkpoint status."
+      },
+      {
+        "voice_id": "seed_spiritual_meditation_guide",
+        "display_name": "Spiritual Meditation Guide",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Soft, centered meditation guide voice with slow breathing cadence, gentle reassurance, and tranquil emotional tone.",
+        "tags": ["meditation", "spiritual", "calm", "guide"],
+        "suggested_use_cases": ["meditation", "wellness_content", "guided_audio"],
+        "demo_sample_text": "Let the breath settle on its own. Nothing to force. Nothing to chase. Only this moment arriving as it is."
+      },
+      {
+        "voice_id": "seed_historical_war_documentary",
+        "display_name": "Historical War Documentary Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Serious, cinematic historical narrator voice with gravity, disciplined pacing, and documentary-style authority.",
+        "tags": ["history", "war", "cinematic", "authority"],
+        "suggested_use_cases": ["history_docs", "war_docs", "long_form_content"],
+        "demo_sample_text": "By dawn the division had lost half its position, but not the discipline that kept the line from breaking."
+      },
+      {
+        "voice_id": "seed_startup_product_demo_host",
+        "display_name": "Startup Product Demo Host",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Confident modern demo voice with startup energy, conversational polish, and crisp product explanation rhythm.",
+        "tags": ["startup", "demo", "modern", "crisp"],
+        "suggested_use_cases": ["product_launches", "saas_content", "demos"],
+        "demo_sample_text": "Here’s the part that matters: you can go from uploaded audio to a reusable voice asset in under two minutes."
+      },
+      {
+        "voice_id": "seed_dark_ai_system_announcement",
+        "display_name": "Dark AI System Announcement",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Cool, controlled synthetic narrator voice with subtle menace, machine precision, and dramatic system-level authority.",
+        "tags": ["ai", "synthetic", "ominous", "system"],
+        "suggested_use_cases": ["fiction", "trailers", "experimental_media"],
+        "demo_sample_text": "System handoff complete. Human supervision remains optional. Operational continuity has already been achieved."
+      },
+      {
+        "voice_id": "seed_faceless_self_mastery_narrator",
+        "display_name": "Faceless Self-Mastery Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Calm masculine narrator voice for self-mastery content with deliberate pacing, emotional restraint, and cinematic seriousness.",
+        "tags": ["self_mastery", "faceless", "calm", "cinematic"],
+        "suggested_use_cases": ["youtube", "mindset_content", "motivation"],
+        "demo_sample_text": "Discipline does not ask whether you feel ready. It asks whether you are willing to move anyway."
+      },
+      {
+        "voice_id": "seed_viral_history_shorts_narrator",
+        "display_name": "Viral History Shorts Narrator",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Fast, high-clarity narrator voice for short-form history content with urgency, crisp phrasing, and strong hook energy.",
+        "tags": ["history", "shorts", "urgent", "hook"],
+        "suggested_use_cases": ["shorts", "history_channels", "viral_content"],
+        "demo_sample_text": "In 48 hours the empire lost the port, the road, and the illusion that the war was under control."
+      },
+      {
+        "voice_id": "seed_productivity_channel_voice",
+        "display_name": "Productivity Channel Voice",
+        "category": "generated_seed",
+        "source_model": "moss_voice_generator",
+        "runtime_target": "moss_tts",
+        "prompt": "Clear, modern, lightly motivational voice with practical focus, minimal fluff, and strong instructional cadence.",
+        "tags": ["productivity", "modern", "practical", "instructional"],
+        "suggested_use_cases": ["productivity", "creator_content", "education"],
+        "demo_sample_text": "The fastest workflow is the one that removes decisions you should not have to make twice."
+      }
+    ],
+    "sound_effect_seed_prompts": [
+      {
+        "sound_id": "seed_city_night_ambience",
+        "display_name": "City Night Ambience",
+        "prompt": "A distant urban night ambience with passing traffic, light wind, and subtle city hum.",
+        "tags": ["city", "night", "ambience"]
+      },
+      {
+        "sound_id": "seed_office_call_center_bed",
+        "display_name": "Office Call Center Bed",
+        "prompt": "A soft office call center ambience with distant keyboard clicks, muffled voices, and HVAC room tone.",
+        "tags": ["office", "call_center", "background"]
+      },
+      {
+        "sound_id": "seed_cinematic_riser_short",
+        "display_name": "Cinematic Short Riser",
+        "prompt": "A short cinematic tension riser for a scene transition or dramatic reveal.",
+        "tags": ["cinematic", "riser", "transition"]
+      }
+    ]
+  }
+}
