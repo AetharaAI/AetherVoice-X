@@ -266,7 +266,7 @@ class StudioService:
             mode=mode,
             status=status,
             present_on_disk=present_on_disk if leaf else bool(endpoint),
-            runtime_wired=runtime_wired and endpoint_ready if requires_endpoint or endpoint else runtime_wired,
+            runtime_wired=runtime_wired,
             invokable=invokable,
             model_path=str(self._canonical_model_path(leaf)) if leaf else None,
             notes=notes,
@@ -277,8 +277,14 @@ class StudioService:
         if not endpoint:
             return False
         try:
-            response = httpx.get(f"{endpoint.rstrip('/')}/health", timeout=2.5)
-            return response.is_success
+            base = endpoint.rstrip("/")
+            response = httpx.get(f"{base}/health", timeout=2.5)
+            if response.is_success:
+                return True
+            if response.status_code == 404:
+                fallback = httpx.get(base, timeout=2.5, follow_redirects=True)
+                return fallback.is_success
+            return False
         except Exception:
             return False
 

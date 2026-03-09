@@ -73,3 +73,11 @@ class TTSClient:
         response = await self.client.post("/internal/studio/routing", json=payload)
         response.raise_for_status()
         return response.json()
+
+    async def warm_studio_route(self, route_name: str, *, tenant_id: str) -> dict:
+        response = await self.client.post(
+            f"/internal/studio/routes/{route_name}/warmup",
+            headers={"X-Tenant-Id": tenant_id},
+        )
+        response.raise_for_status()
+        return response.json()

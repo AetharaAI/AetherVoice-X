@@ -46,3 +46,13 @@ export async function saveStudioRouting(payload: Record<string, unknown>): Promi
     body: JSON.stringify(payload)
   });
 }
+
+export async function warmStudioRoute(routeName: string): Promise<StudioOverview> {
+  const payload = await apiFetch<{ route: string; warmup: Record<string, unknown>; overview: StudioOverview }>(
+    `/v1/tts/studio/routes/${routeName}/warmup`,
+    {
+      method: "POST"
+    }
+  );
+  return payload.overview;
+}

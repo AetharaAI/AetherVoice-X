@@ -78,3 +78,19 @@ async def get_routing(request: Request) -> dict:
 @router.post("/internal/studio/routing")
 async def save_routing(payload: LLMRoutingConfig, request: Request) -> dict:
     return request.app.state.studio_service.save_routing(payload).model_dump()
+
+
+@router.post("/internal/studio/routes/{route_name}/warmup")
+async def warm_route(
+    route_name: str,
+    request: Request,
+    x_tenant_id: str = Header(alias="X-Tenant-Id"),
+) -> dict:
+    adapter = request.app.state.registry.get(route_name)
+    result = await adapter.warmup({"tenant_id": x_tenant_id, "source": "tts_studio"})
+    overview = request.app.state.studio_service.overview(x_tenant_id).model_dump()
+    return {
+        "route": route_name,
+        "warmup": result,
+        "overview": overview,
+    }

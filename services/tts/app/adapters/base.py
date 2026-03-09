@@ -26,6 +26,9 @@ class BaseTTSAdapter(ABC):
     async def complete_text(self, session_id: str) -> list[dict]:
         return []
 
+    async def warmup(self, metadata: dict | None = None) -> dict:
+        return {"status": "noop", "route": self.name, "metadata": metadata or {}}
+
     @abstractmethod
     async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         raise NotImplementedError

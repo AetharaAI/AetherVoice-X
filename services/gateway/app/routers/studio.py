@@ -104,3 +104,13 @@ async def save_routing(
 ) -> dict:
     ensure_scopes(auth, {"voice:tts"})
     return await tts_client.save_studio_routing(payload)
+
+
+@router.post("/v1/tts/studio/routes/{route_name}/warmup")
+async def warm_route(
+    route_name: str,
+    auth: AuthContext = Depends(get_auth_context),
+    tts_client: TTSClient = Depends(get_tts_client),
+) -> dict:
+    ensure_scopes(auth, {"voice:tts"})
+    return await tts_client.warm_studio_route(route_name, tenant_id=auth.tenant_id)

@@ -34,6 +34,17 @@ class OpenMOSSBatchAdapter(BaseTTSAdapter):
         self.ready = self._probe_health()
         return self.ready
 
+    async def warmup(self, metadata: dict | None = None) -> dict:
+        if not self.base_url or self.client is None:
+            raise RuntimeError(f"{self.name} upstream is not configured")
+        response = await self.client.post(
+            "/v1/warmup",
+            json={"metadata": metadata or {}},
+        )
+        response.raise_for_status()
+        self.ready = True
+        return response.json()
+
     async def close(self) -> None:
         if self.client is not None:
             await self.client.aclose()

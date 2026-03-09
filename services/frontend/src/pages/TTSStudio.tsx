@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { createStudioVoice, fetchProviderModels, fetchStudioOverview, importStudioVoice, saveStudioRouting } from "../api/studio";
+import { createStudioVoice, fetchProviderModels, fetchStudioOverview, importStudioVoice, saveStudioRouting, warmStudioRoute } from "../api/studio";
 import { synthesizeText } from "../api/tts";
 import { Badge } from "../components/common/Badge";
 import { Panel } from "../components/common/Panel";
@@ -71,7 +71,9 @@ function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
 function preferredVoiceDesignRoute(routes: StudioRouteDescriptor[]) {
   return (
     routes.find((route) => route.name === "moss_voice_generator" && route.invokable)?.name ??
+    routes.find((route) => route.name === "moss_voice_generator" && route.status === "staged")?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
+    routes.find((route) => route.name === "chatterbox" && route.status === "staged")?.name ??
     routes.find((route) => route.mode === "voice-design")?.name ??
     "moss_voice_generator"
   );
@@ -216,10 +218,39 @@ export function TTSStudio() {
   }, [designRoute, routes, voiceDesignRoutes]);
 
   const selectedDesignRoute = voiceDesignRoutes.find((route) => route.name === designRoute) ?? null;
+  const designRouteWarmable = Boolean(selectedDesignRoute?.status === "staged" && selectedDesignRoute?.name !== "moss_realtime");
   const designPreviewRouteTruth =
     designRoute === "moss_voice_generator"
       ? "Voice Generator preview. Generated timbre should reflect the design prompt when the sidecar is healthy."
       : "Fallback preview. This lets you audition text/audio flow, but it is not true voice-generation conditioning.";
+
+  function applyVoiceDesignState(voice: StudioVoice) {
+    setDesignName(voice.display_name);
+    setDesignPrompt(voice.generation_prompt?.trim() ? voice.generation_prompt : voice.notes ?? "");
+    setDesignPreviewText(designPreviewTextForVoice(voice));
+    setDesignPresetSummary(
+      voice.generation_prompt
+        ? `Loaded ${voice.display_name} from the registry. Review the prompt, render a preview, then save any edits back into the library.`
+        : `Loaded ${voice.display_name} from the registry. This record has no stored generation prompt yet, so review the description before previewing.`
+    );
+    setDesignRoute(voice.source_model === "moss_voice_generator" ? "moss_voice_generator" : preferredVoiceDesignRoute(routes));
+  }
+
+  async function warmRoute(routeName: StudioRouteDescriptor["name"], successMessage: string) {
+    setBusyAction("warm-route");
+    setError(null);
+    setMessage(null);
+    try {
+      const payload = await warmStudioRoute(routeName);
+      setOverview(payload);
+      setMessage(successMessage);
+    } catch (err) {
+      setError((err as Error).message);
+      throw err;
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   function handleVoiceLibrarySelect(voice: StudioVoice) {
     setSelectedVoiceId(voice.voice_id);
@@ -230,17 +261,19 @@ export function TTSStudio() {
   function handleVoiceLibraryLoadIntoDesign(voice: StudioVoice) {
     setSelectedVoiceId(voice.voice_id);
     setActiveTab("Voice Design");
-    setDesignName(voice.display_name);
-    setDesignPrompt(voice.generation_prompt?.trim() ? voice.generation_prompt : voice.notes ?? designPrompt);
-    setDesignPreviewText(designPreviewTextForVoice(voice));
-    setDesignPresetSummary(
-      voice.generation_prompt
-        ? `Loaded ${voice.display_name} from the registry. Review the prompt and render a preview before saving changes.`
-        : `Loaded ${voice.display_name} from the registry. This record has no generation prompt, so preview will use the current description text until you refine it.`
-    );
-    setDesignRoute(voice.source_model === "moss_voice_generator" ? "moss_voice_generator" : preferredVoiceDesignRoute(routes));
+    applyVoiceDesignState(voice);
     setMessage(`Loaded ${voice.display_name} into Voice Design.`);
     setError(null);
+  }
+
+  function handleSelectedVoiceChange(nextVoiceId: string) {
+    setSelectedVoiceId(nextVoiceId);
+    const nextVoice = voices.find((voice) => voice.voice_id === nextVoiceId);
+    if (activeTab === "Voice Design" && nextVoice) {
+      applyVoiceDesignState(nextVoice);
+      setMessage(`Loaded ${nextVoice.display_name} into Voice Design.`);
+      setError(null);
+    }
   }
 
   async function runBatchGeneration(
@@ -366,6 +399,35 @@ export function TTSStudio() {
     }
   }
 
+  async function handleVoiceDesignPreview() {
+    if (!selectedDesignRoute) {
+      setError("Choose a valid preview route first.");
+      return;
+    }
+    if (selectedDesignRoute.name === "moss_realtime") {
+      setError("MOSS Realtime is a live streaming lane, not a batch preview route. Use Voice Generator or Chatterbox fallback for design previews.");
+      return;
+    }
+    if (designRouteWarmable) {
+      try {
+        await warmRoute(
+          selectedDesignRoute.name,
+          `Warmed ${selectedDesignRoute.label}. First load run completed; rendering preview next.`
+        );
+      } catch {
+        return;
+      }
+    }
+    await runBatchGeneration(designPreviewText, designRoute, {
+      metadataExtra: {
+        generation_prompt: designPrompt,
+        source_voice_design: true,
+        preview_voice_name: designName
+      },
+      successMessage: "Voice design preview rendered."
+    });
+  }
+
   return (
     <div className="page-grid">
       <Panel title="OpenMOSS capability surface" eyebrow="TTS Studio">
@@ -388,7 +450,7 @@ export function TTSStudio() {
             </div>
             <div className="field-group">
               <label htmlFor="studio-selected-voice">Selected voice</label>
-              <select id="studio-selected-voice" value={selectedVoiceId} onChange={(event) => setSelectedVoiceId(event.target.value)}>
+              <select id="studio-selected-voice" value={selectedVoiceId} onChange={(event) => handleSelectedVoiceChange(event.target.value)}>
                 {voices.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
                     {voice.display_name}
@@ -400,6 +462,14 @@ export function TTSStudio() {
               <input type="checkbox" checked={saveToLibrary} onChange={(event) => setSaveToLibrary(event.target.checked)} />
               Save new outputs and presets into the library
             </label>
+            <button
+              className="secondary square-action"
+              onClick={() => selectedRoute && void warmRoute(selectedRoute.name, `Warmed ${selectedRoute.label}. Watch the logs for the first-load GPU pass.`)}
+              disabled={busyAction === "warm-route" || !selectedRoute?.runtime_wired || selectedRoute.status === "ready" || selectedRoute.status === "missing" || selectedRoute.status === "disabled"}
+              title="Run an explicit warmup request so the first model load happens now instead of on first operator action."
+            >
+              {busyAction === "warm-route" ? "Warming route..." : "Warm active route"}
+            </button>
           </div>
         </section>
 
@@ -544,7 +614,7 @@ export function TTSStudio() {
                 <label htmlFor="voice-design-route">Runtime target</label>
                 <select id="voice-design-route" value={designRoute} onChange={(event) => setDesignRoute(event.target.value as StudioRouteDescriptor["name"])}>
                   {voiceDesignRoutes.map((route) => (
-                      <option key={route.name} value={route.name}>
+                      <option key={route.name} value={route.name} disabled={route.name === "moss_realtime"}>
                         {routeLabel(route)}
                       </option>
                     ))}
@@ -559,29 +629,31 @@ export function TTSStudio() {
                 <p className="field-hint">Voice Generator is the preferred OpenMOSS route for studio-side voice creation. Save the preset into the registry, or render a preview when the sidecar is healthy.</p>
               </div>
             </details>
-            <details className="accordion">
+            <details className="accordion" open>
               <summary>Preview utterance</summary>
               <div className="accordion-body">
                 <textarea value={designPreviewText} onChange={(event) => setDesignPreviewText(event.target.value)} rows={4} />
-                <p className="field-hint">This sample line is spoken with the current generation prompt so you can audition Voice Generator outputs before saving them into the library.</p>
+                <p className="field-hint">This sample line is spoken with the current generation prompt so you can audition Voice Generator outputs before saving them into the library. If the route is staged, the first click runs a warmup pass and then renders the preview.</p>
               </div>
             </details>
             <div className="toolbar">
               <button
                 className="secondary"
-                onClick={() =>
-                  runBatchGeneration(designPreviewText, designRoute, {
-                    metadataExtra: {
-                      generation_prompt: designPrompt,
-                      source_voice_design: true,
-                      preview_voice_name: designName
-                    },
-                    successMessage: "Voice design preview rendered."
-                  })
+                onClick={() => void handleVoiceDesignPreview()}
+                disabled={
+                  busyAction === "generate" ||
+                  busyAction === "warm-route" ||
+                  !selectedDesignRoute ||
+                  (!selectedDesignRoute.invokable && !designRouteWarmable)
                 }
-                disabled={busyAction === "generate" || !selectedDesignRoute?.invokable}
               >
-                {busyAction === "generate" ? "Rendering preview..." : "Render design preview"}
+                {busyAction === "generate"
+                  ? "Rendering preview..."
+                  : busyAction === "warm-route"
+                    ? "Warming model..."
+                    : designRouteWarmable
+                      ? "Warm model + render preview"
+                      : "Render design preview"}
               </button>
               <button onClick={() => handleVoiceDesignSave()} disabled={busyAction === "save-voice"}>
                 {busyAction === "save-voice" ? "Saving preset..." : "Save design into library"}

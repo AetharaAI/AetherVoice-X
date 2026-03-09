@@ -42,6 +42,10 @@ class SynthesizeRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class WarmupRequest(BaseModel):
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 @dataclass
 class RuntimeAssets:
     kind: FamilyKind
@@ -235,6 +239,34 @@ def _build_conversations(runtime: RuntimeAssets, request: SynthesizeRequest) -> 
     return conversations, "generation", artifacts
 
 
+def _build_warmup_request(runtime: RuntimeAssets, metadata: dict[str, Any] | None = None) -> SynthesizeRequest:
+    metadata = dict(metadata or {})
+    if runtime.kind == "voice_generator":
+        return SynthesizeRequest(
+            text="AetherPro confirms the voice design warmup path is online.",
+            metadata={
+                **metadata,
+                "extra": {
+                    "generation_prompt": "Clear, modern, lightly motivational voice with practical focus, minimal fluff, and strong instructional cadence."
+                },
+            },
+        )
+    if runtime.kind == "ttsd":
+        return SynthesizeRequest(
+            text="[S1] The control room is online. [S2] Dialogue synthesis warmup complete.",
+            metadata=metadata,
+        )
+    if runtime.kind == "soundeffect":
+        return SynthesizeRequest(
+            text="subtle synth confirmation tone with clean futuristic ambience",
+            metadata={"extra": {"duration_seconds": 2}, **metadata},
+        )
+    return SynthesizeRequest(
+        text="AetherPro confirms OpenMOSS batch synthesis is online.",
+        metadata=metadata,
+    )
+
+
 def _run_generation(runtime: RuntimeAssets, request: SynthesizeRequest) -> dict[str, Any]:
     conversations, mode, artifacts = _build_conversations(runtime, request)
     batch = runtime.processor(conversations, mode=mode)
@@ -378,6 +410,49 @@ async def synthesize(payload: SynthesizeRequest) -> dict[str, Any]:
             "inference_ms": elapsed_ms,
             "total_ms": elapsed_ms,
         },
+        "artifacts": {
+            **result["artifacts"],
+            "runtime_path_used": f"moss_{runtime.kind}",
+        },
+    }
+
+
+@app.post("/v1/warmup")
+async def warmup(payload: WarmupRequest) -> dict[str, Any]:
+    runtime: RuntimeAssets = app.state.runtime
+    started_at = time.perf_counter()
+    request = _build_warmup_request(runtime, payload.metadata)
+    logger.info(
+        "moss_family_warmup_started",
+        extra={
+            "kind": runtime.kind,
+            "model_source": runtime.model_source,
+            "device": str(runtime.device),
+        },
+    )
+    try:
+        result = await asyncio.to_thread(_run_generation, runtime, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - runtime depends on upstream model behavior
+        logger.exception("moss_family_warmup_failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "moss_family_warmup_complete",
+        extra={
+            "kind": runtime.kind,
+            "model_source": runtime.model_source,
+            "device": str(runtime.device),
+            "elapsed_ms": elapsed_ms,
+            "duration_ms": result["duration_ms"],
+        },
+    )
+    return {
+        "status": "ok",
+        "route": f"moss_{runtime.kind}",
+        "elapsed_ms": elapsed_ms,
+        "duration_ms": result["duration_ms"],
         "artifacts": {
             **result["artifacts"],
             "runtime_path_used": f"moss_{runtime.kind}",
