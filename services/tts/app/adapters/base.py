@@ -23,6 +23,9 @@ class BaseTTSAdapter(ABC):
     async def push_text(self, session_id: str, text: str) -> list[dict]:
         raise NotImplementedError
 
+    async def complete_text(self, session_id: str) -> list[dict]:
+        return []
+
     @abstractmethod
     async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         raise NotImplementedError

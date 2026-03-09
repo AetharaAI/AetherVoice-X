@@ -143,7 +143,7 @@ export function useTTSStream() {
     return audioContextRef.current;
   }
 
-  async function playChunkAudio(payload: string) {
+  async function playChunkAudio(payload: string, metadata?: Record<string, unknown>) {
     const context = await ensureAudioContext();
     if (!context) {
       return;
@@ -155,7 +155,10 @@ export function useTTSStream() {
     source.buffer = decoded;
     source.connect(context.destination);
     const now = context.currentTime + 0.02;
-    const startAt = Math.max(now, nextPlaybackTimeRef.current);
+    const overlapSamples = Number(metadata?.overlap_samples ?? 0);
+    const sampleRate = Number(metadata?.sample_rate ?? decoded.sampleRate);
+    const overlapSeconds = overlapSamples > 0 && sampleRate > 0 ? overlapSamples / sampleRate : 0;
+    const startAt = Math.max(now, nextPlaybackTimeRef.current - overlapSeconds);
     source.start(startAt);
     nextPlaybackTimeRef.current = startAt + decoded.duration;
   }
@@ -267,7 +270,7 @@ export function useTTSStream() {
           setPhase("streaming-audio");
           appendEvent(`audio chunk ${chunkCountRef.current}`);
           if (payload.audio_b64) {
-            void playChunkAudio(payload.audio_b64);
+            void playChunkAudio(payload.audio_b64, payload.metadata);
           }
         }
         if (payload.type === "final_audio" && payload.audio_b64) {
@@ -322,6 +325,10 @@ export function useTTSStream() {
       if (index < deltas.length - 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 35));
       }
+    }
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "text_complete" }));
+      appendEvent("text stream sealed");
     }
   }
 

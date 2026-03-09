@@ -39,6 +39,10 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                 events = await websocket.app.state.streaming_service.push(session_id, payload["text"])
                 for event in events:
                     await websocket.send_json(event)
+            elif payload["type"] == "text_complete":
+                events = await websocket.app.state.streaming_service.complete_text(session_id)
+                for event in events:
+                    await websocket.send_json(event)
             elif payload["type"] == "end_stream":
                 result, audio_bytes = await websocket.app.state.streaming_service.finish(session_id)
                 await websocket.send_json(

@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import wave
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -83,6 +83,8 @@ class SessionState:
     first_chunk_at: float | None = None
     sequence: int = 0
     raw_audio_tokens: list[torch.Tensor] = field(default_factory=list)
+    text_completed: bool = False
+    codec_stream: Any = None
 
 
 def _env_float(name: str, default: float) -> float:
@@ -182,6 +184,112 @@ def _wav_bytes_from_array(audio: np.ndarray, sample_rate: int) -> bytes:
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm16.tobytes())
     return buffer.getvalue()
+
+
+def _maybe_codec_streaming(codec: Any, *, batch_size: int = 1):
+    if codec is None or not hasattr(codec, "streaming"):
+        return nullcontext()
+    return codec.streaming(batch_size=batch_size)
+
+
+def _decoder_overlap_samples(runtime: RuntimeAssets, audio: np.ndarray, *, sequence: int) -> int:
+    if sequence <= 1 or runtime.decode_chunk_frames <= 0 or runtime.decode_overlap_frames <= 0:
+        return 0
+    overlap_ratio = runtime.decode_overlap_frames / runtime.decode_chunk_frames
+    return int(audio.shape[0] * overlap_ratio)
+
+
+def _chunk_event(runtime: RuntimeAssets, state: SessionState, session_id: str, wav: torch.Tensor) -> dict[str, Any] | None:
+    if wav.numel() == 0:
+        return None
+    audio = wav.detach().cpu().numpy().reshape(-1)
+    state.sequence += 1
+    if state.first_chunk_at is None:
+        state.first_chunk_at = time.perf_counter()
+    overlap_samples = _decoder_overlap_samples(runtime, audio, sequence=state.sequence)
+    return {
+        "type": "audio_chunk",
+        "session_id": session_id,
+        "sequence": state.sequence,
+        "audio_b64": base64.b64encode(_wav_bytes_from_array(audio, state.sample_rate)).decode("ascii"),
+        "format": state.output_format,
+        "metadata": {
+            "sample_rate": state.sample_rate,
+            "overlap_samples": overlap_samples,
+            "overlap_ms": int((overlap_samples / state.sample_rate) * 1000) if overlap_samples else 0,
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+        },
+    }
+
+
+def _collect_live_events(
+    runtime: RuntimeAssets,
+    state: SessionState,
+    session_id: str,
+    audio_frames: list[torch.Tensor],
+    *,
+    codebook_size: int,
+    audio_eos_token: int,
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for frame in audio_frames:
+        tokens = _sanitize_audio_tokens(frame.detach(), codebook_size=codebook_size, audio_eos_token=audio_eos_token)
+        if tokens.numel() == 0:
+            continue
+        state.raw_audio_tokens.append(tokens.cpu())
+        state.decoder.push_tokens(tokens)
+        for wav in state.decoder.audio_chunks():
+            event = _chunk_event(runtime, state, session_id, wav)
+            if event is not None:
+                events.append(event)
+    return events
+
+
+def _flush_decoder_events(runtime: RuntimeAssets, state: SessionState, session_id: str) -> list[dict[str, Any]]:
+    flushed = state.decoder.flush()
+    if flushed is None or flushed.numel() == 0:
+        return []
+    event = _chunk_event(runtime, state, session_id, flushed)
+    return [event] if event is not None else []
+
+
+def _drain_completed_text(
+    runtime: RuntimeAssets,
+    state: SessionState,
+    session_id: str,
+    *,
+    codebook_size: int,
+    audio_eos_token: int,
+    flush_decoder: bool,
+) -> list[dict[str, Any]]:
+    events = _collect_live_events(
+        runtime,
+        state,
+        session_id,
+        list(state.session.end_text()),
+        codebook_size=codebook_size,
+        audio_eos_token=audio_eos_token,
+    )
+    while True:
+        drained = list(state.session.drain(max_steps=1))
+        if not drained:
+            break
+        events.extend(
+            _collect_live_events(
+                runtime,
+                state,
+                session_id,
+                drained,
+                codebook_size=codebook_size,
+                audio_eos_token=audio_eos_token,
+            )
+        )
+        if state.session.inferencer.is_finished:
+            break
+    if flush_decoder:
+        events.extend(_flush_decoder_events(runtime, state, session_id))
+    state.text_completed = True
+    return events
 
 
 def _decode_full_audio(runtime: RuntimeAssets, session_state: SessionState) -> tuple[bytes, int]:
@@ -335,6 +443,8 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         decode_kwargs={"chunk_duration": -1},
         device=runtime.device,
     )
+    codec_stream = _maybe_codec_streaming(runtime.codec, batch_size=1)
+    codec_stream.__enter__()
     app.state.sessions[payload.session_id] = SessionState(
         session=session,
         decoder=decoder,
@@ -343,6 +453,7 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         requested_voice=payload.voice,
         context_mode=payload.context_mode,
         conditioning_source=prompt_audio_path if (prompt_audio_path := os.getenv("MOSS_PROMPT_AUDIO_PATH")) else "moss_default_unconditioned",
+        codec_stream=codec_stream,
     )
     logger.info(
         "moss_stream_started",
@@ -371,31 +482,17 @@ async def push_text(session_id: str, payload: TextChunkRequest) -> dict[str, Any
     audio_eos_token = int(getattr(state.session.inferencer, "audio_eos_token", 1026))
     events: list[dict[str, Any]] = []
     async with app.state.inference_lock:
-        audio_frames = state.session.push_text(payload.text)
-        for frame in audio_frames:
-            tokens = _sanitize_audio_tokens(frame.detach(), codebook_size=codebook_size, audio_eos_token=audio_eos_token)
-            if tokens.numel() == 0:
-                continue
-            state.raw_audio_tokens.append(tokens.cpu())
-            state.decoder.push_tokens(tokens)
-            for wav in state.decoder.audio_chunks():
-                if wav.numel() == 0:
-                    continue
-                state.sequence += 1
-                if state.first_chunk_at is None:
-                    state.first_chunk_at = time.perf_counter()
-                events.append(
-                    {
-                        "type": "audio_chunk",
-                        "session_id": session_id,
-                        "sequence": state.sequence,
-                        "audio_b64": base64.b64encode(
-                            _wav_bytes_from_array(wav.detach().cpu().numpy().reshape(-1), state.sample_rate)
-                        ).decode("ascii"),
-                        "format": state.output_format,
-                        "metadata": {},
-                    }
-                )
+        if state.text_completed:
+            raise HTTPException(status_code=409, detail="This MOSS stream turn is already completed. Start a new stream for another utterance.")
+        audio_frames = list(state.session.push_text(payload.text))
+        events = _collect_live_events(
+            runtime,
+            state,
+            session_id,
+            audio_frames,
+            codebook_size=codebook_size,
+            audio_eos_token=audio_eos_token,
+        )
     logger.info(
         "moss_stream_text_push",
         extra={
@@ -410,6 +507,39 @@ async def push_text(session_id: str, payload: TextChunkRequest) -> dict[str, Any
     return {"events": events}
 
 
+@app.post("/v1/stream/{session_id}/complete")
+async def complete_text(session_id: str) -> dict[str, Any]:
+    runtime: RuntimeAssets = app.state.runtime
+    state: SessionState | None = app.state.sessions.get(session_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Unknown MOSS stream session.")
+    if state.text_completed:
+        return {"events": []}
+    codebook_size = int(getattr(getattr(runtime.codec, "config", runtime.codec), "codebook_size", 1024))
+    audio_eos_token = int(getattr(state.session.inferencer, "audio_eos_token", 1026))
+    async with app.state.inference_lock:
+        events = _drain_completed_text(
+            runtime,
+            state,
+            session_id,
+            codebook_size=codebook_size,
+            audio_eos_token=audio_eos_token,
+            flush_decoder=True,
+        )
+    logger.info(
+        "moss_stream_text_completed",
+        extra={
+            "session_id": session_id,
+            "requested_voice": state.requested_voice,
+            "conditioning_source_used": state.conditioning_source,
+            "chunk_events_emitted": len(events),
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+            "kv_cache_reuse": "session_local",
+        },
+    )
+    return {"events": events}
+
+
 @app.post("/v1/stream/{session_id}/end")
 async def end_stream(session_id: str) -> dict[str, Any]:
     runtime: RuntimeAssets = app.state.runtime
@@ -418,22 +548,21 @@ async def end_stream(session_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Unknown MOSS stream session.")
     codebook_size = int(getattr(getattr(runtime.codec, "config", runtime.codec), "codebook_size", 1024))
     audio_eos_token = int(getattr(state.session.inferencer, "audio_eos_token", 1026))
-    async with app.state.inference_lock:
-        for frame in state.session.end_text():
-            tokens = _sanitize_audio_tokens(frame.detach(), codebook_size=codebook_size, audio_eos_token=audio_eos_token)
-            if tokens.numel() > 0:
-                state.raw_audio_tokens.append(tokens.cpu())
-        while True:
-            drained = state.session.drain(max_steps=1)
-            if not drained:
-                break
-            for frame in drained:
-                tokens = _sanitize_audio_tokens(frame.detach(), codebook_size=codebook_size, audio_eos_token=audio_eos_token)
-                if tokens.numel() > 0:
-                    state.raw_audio_tokens.append(tokens.cpu())
-            if state.session.inferencer.is_finished:
-                break
-        audio_bytes, duration_ms = _decode_full_audio(runtime, state)
+    try:
+        async with app.state.inference_lock:
+            if not state.text_completed:
+                _drain_completed_text(
+                    runtime,
+                    state,
+                    session_id,
+                    codebook_size=codebook_size,
+                    audio_eos_token=audio_eos_token,
+                    flush_decoder=False,
+                )
+            audio_bytes, duration_ms = _decode_full_audio(runtime, state)
+    finally:
+        if state.codec_stream is not None:
+            state.codec_stream.__exit__(None, None, None)
 
     total_ms = int((time.perf_counter() - state.started_at) * 1000)
     first_chunk_ms = 0
@@ -468,5 +597,8 @@ async def end_stream(session_id: str) -> dict[str, Any]:
             "format": state.output_format,
             "first_chunk_ms": first_chunk_ms,
             "chunk_count": state.sequence,
+            "conditioning_source_used": state.conditioning_source,
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+            "final_artifact_source_route": "moss_realtime.final_decode",
         },
     }

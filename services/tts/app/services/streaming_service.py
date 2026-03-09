@@ -251,6 +251,57 @@ class StreamingService:
             }
         ]
 
+    async def complete_text(self, session_id: str) -> list[dict]:
+        state = self.sessions[session_id]
+        runtime_truth: StreamRuntimeTruth = state["runtime"]
+        logger.info(
+            "tts_stream_text_complete",
+            extra={
+                "session_id": session_id,
+                "runtime_path_used": runtime_truth.runtime_path_used,
+                "live_chunk_source_route": runtime_truth.live_chunk_source_route,
+                "selected_voice_id": runtime_truth.selected_voice_id,
+                "resolved_conditioning_asset": runtime_truth.resolved_conditioning_asset,
+                "fallback_route_used": runtime_truth.fallback_route_used,
+            },
+        )
+        if state["mode"] != "adapter":
+            return []
+        events = await state["adapter"].complete_text(session_id)
+        for event in events:
+            event_metadata = dict(event.get("metadata") or {})
+            event_metadata.update(
+                {
+                    "runtime": self._runtime_metadata(runtime_truth),
+                    "live_chunk_source_route": runtime_truth.live_chunk_source_route,
+                }
+            )
+            event["metadata"] = event_metadata
+        if not state["first_chunk_recorded"] and any(event.get("type") == "audio_chunk" for event in events):
+            state["first_chunk_recorded"] = True
+            first_chunk_ms = int((time.perf_counter() - state["started_at"]) * 1000)
+            voice_tts_time_to_first_chunk_ms.labels(service="tts").observe(first_chunk_ms)
+            logger.info(
+                "tts_stream_first_chunk",
+                extra={
+                    "session_id": session_id,
+                    "first_chunk_ms": first_chunk_ms,
+                    "live_chunk_source_route": runtime_truth.live_chunk_source_route,
+                    "runtime_path_used": runtime_truth.runtime_path_used,
+                },
+            )
+        if events:
+            logger.info(
+                "tts_stream_chunk_batch",
+                extra={
+                    "session_id": session_id,
+                    "chunk_events": sum(1 for event in events if event.get("type") == "audio_chunk"),
+                    "live_chunk_source_route": runtime_truth.live_chunk_source_route,
+                    "conditioning_source": runtime_truth.actual_runtime_conditioning_source,
+                },
+            )
+        return events
+
     async def finish(self, session_id: str) -> tuple[TTSResult, bytes]:
         state = self.sessions.pop(session_id)
         runtime_truth: StreamRuntimeTruth = state["runtime"]

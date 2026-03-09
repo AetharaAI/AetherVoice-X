@@ -76,6 +76,23 @@ class MossRealtimeAdapter(BaseTTSAdapter):
             raise RuntimeError("MOSS realtime upstream returned an invalid event payload")
         return events
 
+    async def complete_text(self, session_id: str) -> list[dict]:
+        if not self.base_url or self.client is None:
+            raise RuntimeError("MOSS realtime upstream is not configured")
+        response = await self.client.post(f"/v1/stream/{session_id}/complete")
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = response.text.strip()
+            if detail:
+                raise RuntimeError(f"MOSS realtime text completion failed: {detail}") from exc
+            raise
+        payload = response.json()
+        events = payload.get("events")
+        if not isinstance(events, list):
+            raise RuntimeError("MOSS realtime upstream returned an invalid completion event payload")
+        return events
+
     async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         if not self.base_url or self.client is None:
             raise RuntimeError("MOSS realtime upstream is not configured")
