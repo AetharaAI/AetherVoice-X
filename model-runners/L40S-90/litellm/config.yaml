@@ -5,7 +5,7 @@ model_list:
   - model_name: qwen3.5-35b
     litellm_params:
       model: openai/qwen3.5-35b
-      api_base: http://qwen35-35b:8000/v1
+      api_base: http://qwen3.5-35b:8000/v1
       api_key: "EMPTY"
       supports_images: true
       supports_vision: true
@@ -18,7 +18,7 @@ model_list:
   - model_name: qwen3.5-9b
     litellm_params:
       model: openai/qwen3.5-9b
-      api_base: http://qwen35-9b:8000/v1
+      api_base: http://qwen3.5-9b:8000/v1
       api_key: "EMPTY"
       supports_images: true
       supports_vision: true
@@ -31,7 +31,7 @@ model_list:
   - model_name: qwen3.5-4b
     litellm_params:
       model: openai/qwen3.5-4b
-      api_base: http://qwen35-4b:8000/v1
+      api_base: http://qwen3.5-4b:8000/v1
       api_key: "EMPTY"
       supports_images: true
       supports_vision: true

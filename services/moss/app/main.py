@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import wave
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -84,7 +84,6 @@ class SessionState:
     sequence: int = 0
     raw_audio_tokens: list[torch.Tensor] = field(default_factory=list)
     text_completed: bool = False
-    codec_stream: Any = None
 
 
 def _env_float(name: str, default: float) -> float:
@@ -186,19 +185,6 @@ def _wav_bytes_from_array(audio: np.ndarray, sample_rate: int) -> bytes:
     return buffer.getvalue()
 
 
-def _maybe_codec_streaming(codec: Any, *, batch_size: int = 1):
-    if codec is None or not hasattr(codec, "streaming"):
-        return nullcontext()
-    return codec.streaming(batch_size=batch_size)
-
-
-def _decoder_overlap_samples(runtime: RuntimeAssets, audio: np.ndarray, *, sequence: int) -> int:
-    if sequence <= 1 or runtime.decode_chunk_frames <= 0 or runtime.decode_overlap_frames <= 0:
-        return 0
-    overlap_ratio = runtime.decode_overlap_frames / runtime.decode_chunk_frames
-    return int(audio.shape[0] * overlap_ratio)
-
-
 def _chunk_event(runtime: RuntimeAssets, state: SessionState, session_id: str, wav: torch.Tensor) -> dict[str, Any] | None:
     if wav.numel() == 0:
         return None
@@ -206,7 +192,6 @@ def _chunk_event(runtime: RuntimeAssets, state: SessionState, session_id: str, w
     state.sequence += 1
     if state.first_chunk_at is None:
         state.first_chunk_at = time.perf_counter()
-    overlap_samples = _decoder_overlap_samples(runtime, audio, sequence=state.sequence)
     return {
         "type": "audio_chunk",
         "session_id": session_id,
@@ -215,8 +200,6 @@ def _chunk_event(runtime: RuntimeAssets, state: SessionState, session_id: str, w
         "format": state.output_format,
         "metadata": {
             "sample_rate": state.sample_rate,
-            "overlap_samples": overlap_samples,
-            "overlap_ms": int((overlap_samples / state.sample_rate) * 1000) if overlap_samples else 0,
             "live_chunk_source_route": "moss_realtime.decoder_stream",
         },
     }
@@ -443,8 +426,6 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         decode_kwargs={"chunk_duration": -1},
         device=runtime.device,
     )
-    codec_stream = _maybe_codec_streaming(runtime.codec, batch_size=1)
-    codec_stream.__enter__()
     app.state.sessions[payload.session_id] = SessionState(
         session=session,
         decoder=decoder,
@@ -453,7 +434,6 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         requested_voice=payload.voice,
         context_mode=payload.context_mode,
         conditioning_source=prompt_audio_path if (prompt_audio_path := os.getenv("MOSS_PROMPT_AUDIO_PATH")) else "moss_default_unconditioned",
-        codec_stream=codec_stream,
     )
     logger.info(
         "moss_stream_started",
@@ -548,21 +528,17 @@ async def end_stream(session_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Unknown MOSS stream session.")
     codebook_size = int(getattr(getattr(runtime.codec, "config", runtime.codec), "codebook_size", 1024))
     audio_eos_token = int(getattr(state.session.inferencer, "audio_eos_token", 1026))
-    try:
-        async with app.state.inference_lock:
-            if not state.text_completed:
-                _drain_completed_text(
-                    runtime,
-                    state,
-                    session_id,
-                    codebook_size=codebook_size,
-                    audio_eos_token=audio_eos_token,
-                    flush_decoder=False,
-                )
-            audio_bytes, duration_ms = _decode_full_audio(runtime, state)
-    finally:
-        if state.codec_stream is not None:
-            state.codec_stream.__exit__(None, None, None)
+    async with app.state.inference_lock:
+        if not state.text_completed:
+            _drain_completed_text(
+                runtime,
+                state,
+                session_id,
+                codebook_size=codebook_size,
+                audio_eos_token=audio_eos_token,
+                flush_decoder=False,
+            )
+        audio_bytes, duration_ms = _decode_full_audio(runtime, state)
 
     total_ms = int((time.perf_counter() - state.started_at) * 1000)
     first_chunk_ms = 0

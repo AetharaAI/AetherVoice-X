@@ -143,7 +143,7 @@ export function useTTSStream() {
     return audioContextRef.current;
   }
 
-  async function playChunkAudio(payload: string, metadata?: Record<string, unknown>) {
+  async function playChunkAudio(payload: string) {
     const context = await ensureAudioContext();
     if (!context) {
       return;
@@ -155,10 +155,7 @@ export function useTTSStream() {
     source.buffer = decoded;
     source.connect(context.destination);
     const now = context.currentTime + 0.02;
-    const overlapSamples = Number(metadata?.overlap_samples ?? 0);
-    const sampleRate = Number(metadata?.sample_rate ?? decoded.sampleRate);
-    const overlapSeconds = overlapSamples > 0 && sampleRate > 0 ? overlapSamples / sampleRate : 0;
-    const startAt = Math.max(now, nextPlaybackTimeRef.current - overlapSeconds);
+    const startAt = Math.max(now, nextPlaybackTimeRef.current);
     source.start(startAt);
     nextPlaybackTimeRef.current = startAt + decoded.duration;
   }
@@ -270,7 +267,7 @@ export function useTTSStream() {
           setPhase("streaming-audio");
           appendEvent(`audio chunk ${chunkCountRef.current}`);
           if (payload.audio_b64) {
-            void playChunkAudio(payload.audio_b64, payload.metadata);
+            void playChunkAudio(payload.audio_b64);
           }
         }
         if (payload.type === "final_audio" && payload.audio_b64) {
