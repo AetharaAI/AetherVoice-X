@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     hf_home: str | None = Field(default=None, validation_alias=AliasChoices("HF_HOME"))
     huggingface_hub_cache: str | None = Field(default=None, validation_alias=AliasChoices("HUGGINGFACE_HUB_CACHE"))
     transformers_cache: str | None = Field(default=None, validation_alias=AliasChoices("TRANSFORMERS_CACHE"))
+    host_model_root: str = Field(default="/mnt/aetherpro/models", validation_alias=AliasChoices("HOST_MODEL_ROOT"))
     aether_model_root: str = Field(default="/models", validation_alias=AliasChoices("AETHER_MODEL_ROOT"))
 
     voxtral_model_id: str = Field(default="mistralai/Voxtral-Mini-4B-Realtime-2602", validation_alias=AliasChoices("VOXTRAL_MODEL_ID"))

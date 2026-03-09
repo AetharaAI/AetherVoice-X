@@ -133,8 +133,40 @@ class StudioService:
     def _canonical_model_path(self, leaf: str) -> Path:
         return Path(self.settings.openmoss_model_root) / leaf
 
+    def _container_model_path(self, leaf: str) -> Path:
+        return Path(self.settings.aether_model_root) / "audio" / "OpenMOSS-Team" / leaf
+
+    def _model_candidates(self, leaf: str) -> list[Path]:
+        canonical_root = Path(self.settings.openmoss_model_root)
+        host_root = Path(self.settings.host_model_root)
+        container_root = Path(self.settings.aether_model_root)
+        candidates: list[Path] = [canonical_root / leaf]
+
+        try:
+            relative_root = canonical_root.relative_to(host_root)
+        except ValueError:
+            relative_root = None
+
+        if relative_root is not None:
+            candidates.append(container_root / relative_root / leaf)
+
+        candidates.append(self._container_model_path(leaf))
+
+        deduped: list[Path] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(candidate)
+        return deduped
+
+    def _model_exists(self, leaf: str) -> bool:
+        return any(candidate.exists() for candidate in self._model_candidates(leaf))
+
     def _route_status(self, leaf: str, *, requires_endpoint: bool = False, endpoint: str | None = None) -> str:
-        model_exists = self._canonical_model_path(leaf).exists()
+        model_exists = self._model_exists(leaf)
         if requires_endpoint:
             if model_exists and endpoint:
                 return "ready"
