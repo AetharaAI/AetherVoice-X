@@ -92,6 +92,7 @@ button.secondary {
   background: rgba(255, 255, 255, 0.08);
   color: inherit;
   border: 1px solid var(--border);
+  border-radius: 14px;
 }
 
 textarea, input, select, pre {
@@ -641,7 +642,7 @@ textarea, input, select, pre {
 
 .studio-save-toggle {
   padding: 0.85rem 0.95rem;
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
 }
@@ -655,6 +656,7 @@ textarea, input, select, pre {
 
 .studio-tab {
   border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
 .studio-tab.active {
@@ -662,7 +664,7 @@ textarea, input, select, pre {
 }
 
 .accordion {
-  border-radius: 22px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
   overflow: hidden;
@@ -693,7 +695,24 @@ textarea, input, select, pre {
 
 .preset-chip {
   padding: 0.65rem 0.95rem;
-  border-radius: 999px;
+  border-radius: 12px;
+}
+
+.studio-voice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.studio-voice-card {
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+}
+
+.studio-voice-card .toolbar {
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .studio-voice-card h3,
@@ -770,5 +789,15 @@ textarea, input, select, pre {
 
   .stream-output-actions audio {
     width: 100%;
+  }
+
+  .studio-voice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .studio-voice-grid {
+    grid-template-columns: 1fr;
   }
 }

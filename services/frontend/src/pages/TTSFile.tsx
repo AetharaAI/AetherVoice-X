@@ -7,26 +7,32 @@ import { Panel } from "../components/common/Panel";
 import { canPlayAudio, formatMs } from "../lib/format";
 import type { ModelInfo, TTSResponse } from "../types/api";
 
-function composeStructuredText(tags: string, body: string) {
-  return [tags.trim(), body.trim()].filter(Boolean).join("\n");
-}
-
 export function TTSFile() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState("chatterbox");
   const [voiceMode, setVoiceMode] = useState("default");
   const [customVoice, setCustomVoice] = useState("");
-  const [tagBlock, setTagBlock] = useState("<narration mode=\"support\" />");
+  const [operatorNotes, setOperatorNotes] = useState("Support dispatch narration with clear sentence boundaries.");
   const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
   const [speed, setSpeed] = useState(1);
   const [emotion, setEmotion] = useState("calm");
   const [speakerHint, setSpeakerHint] = useState("support_agent");
+  const [splitText, setSplitText] = useState(true);
+  const [chunkSize, setChunkSize] = useState(180);
+  const [temperature, setTemperature] = useState(0.8);
+  const [exaggeration, setExaggeration] = useState(1.15);
+  const [cfgWeight, setCfgWeight] = useState(0.5);
+  const [seed, setSeed] = useState("2025");
   const [format, setFormat] = useState("wav");
   const [response, setResponse] = useState<TTSResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const batchModels = models.filter((entry) => entry.kind === "tts" && entry.supports_batch);
   const resolvedVoice = voiceMode === "custom" ? customVoice.trim() || "default" : "default";
-  const structuredText = useMemo(() => composeStructuredText(tagBlock, bodyText), [tagBlock, bodyText]);
+  const selectedModel = useMemo(() => batchModels.find((entry) => entry.name === model) ?? null, [batchModels, model]);
+  const isChatterbox = model === "chatterbox";
+  const modelHelperText = isChatterbox
+    ? "Chatterbox batch mode supports richer shaping controls. These knobs ride in request metadata instead of being prepended into spoken text."
+    : "OpenMOSS batch routes preserve operator notes in metadata. Only the narration body is spoken.";
 
   useEffect(() => {
     fetchModels()
@@ -48,12 +54,25 @@ export function TTSFile() {
         await synthesizeText({
           model,
           voice: resolvedVoice,
-          text: structuredText,
+          text: bodyText.trim(),
           format,
           sample_rate: 24000,
           stream: false,
           style: { speed, emotion, speaker_hint: speakerHint || undefined },
-          metadata: { source: "console", lane: "tts_file" }
+          metadata: {
+            source: "console",
+            lane: "tts_file",
+            extra: {
+              operator_notes: operatorNotes.trim() || undefined,
+              voice_mode: voiceMode,
+              split_text: splitText,
+              chunk_size: chunkSize,
+              temperature,
+              exaggeration,
+              cfg_weight: cfgWeight,
+              seed: seed.trim() ? Number(seed) : undefined,
+            }
+          }
         })
       );
     } catch (err) {
@@ -105,14 +124,14 @@ export function TTSFile() {
           </div>
           <div className="control-grid">
             <div className="field-group">
-              <label htmlFor="tts-file-tags">Control tags / directives</label>
+              <label htmlFor="tts-file-notes">Operator notes</label>
               <textarea
-                id="tts-file-tags"
+                id="tts-file-notes"
                 className="textarea-mono"
-                value={tagBlock}
-                onChange={(event) => setTagBlock(event.target.value)}
+                value={operatorNotes}
+                onChange={(event) => setOperatorNotes(event.target.value)}
                 rows={4}
-                placeholder="<prosody rate=&quot;medium&quot; />"
+                placeholder="Document the intended delivery, use-case, or model-specific shaping notes."
               />
             </div>
             <div className="field-group">
@@ -126,43 +145,91 @@ export function TTSFile() {
               />
             </div>
           </div>
-          <div className="control-grid">
-            <div className="field-group">
-              <label htmlFor="tts-file-speed">Speed</label>
-              <div className="range-row">
-                <input
-                  id="tts-file-speed"
-                  type="range"
-                  min="0.7"
-                  max="1.3"
-                  step="0.05"
-                  value={speed}
-                  onChange={(event) => setSpeed(Number(event.target.value))}
-                />
-                <output>{speed.toFixed(2)}x</output>
+          <div className="detail-section">
+            <h3>{selectedModel?.name ?? model} controls</h3>
+            <p className="muted">{modelHelperText}</p>
+            {isChatterbox ? (
+              <div className="control-grid">
+                <div className="field-group">
+                  <label htmlFor="tts-file-split">Split long text</label>
+                  <label className="switch">
+                    <input id="tts-file-split" type="checkbox" checked={splitText} onChange={(event) => setSplitText(event.target.checked)} />
+                    Split long passages before synthesis
+                  </label>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-chunk-size">Chunk size</label>
+                  <div className="range-row">
+                    <input id="tts-file-chunk-size" type="range" min="120" max="500" step="10" value={chunkSize} onChange={(event) => setChunkSize(Number(event.target.value))} />
+                    <output>{chunkSize}</output>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-temperature">Temperature</label>
+                  <div className="range-row">
+                    <input id="tts-file-temperature" type="range" min="0.2" max="1.4" step="0.05" value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
+                    <output>{temperature.toFixed(2)}</output>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-exaggeration">Exaggeration</label>
+                  <div className="range-row">
+                    <input id="tts-file-exaggeration" type="range" min="0.8" max="1.8" step="0.05" value={exaggeration} onChange={(event) => setExaggeration(Number(event.target.value))} />
+                    <output>{exaggeration.toFixed(2)}</output>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-cfg">CFG weight</label>
+                  <div className="range-row">
+                    <input id="tts-file-cfg" type="range" min="0.2" max="1.2" step="0.05" value={cfgWeight} onChange={(event) => setCfgWeight(Number(event.target.value))} />
+                    <output>{cfgWeight.toFixed(2)}</output>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-seed">Generation seed</label>
+                  <input id="tts-file-seed" value={seed} onChange={(event) => setSeed(event.target.value)} placeholder="2025" />
+                </div>
               </div>
-            </div>
-            <div className="field-group">
-              <label htmlFor="tts-file-emotion">Emotion hint</label>
-              <select id="tts-file-emotion" value={emotion} onChange={(event) => setEmotion(event.target.value)}>
-                <option value="calm">calm</option>
-                <option value="neutral">neutral</option>
-                <option value="confident">confident</option>
-                <option value="urgent">urgent</option>
-              </select>
-            </div>
-            <div className="field-group">
-              <label htmlFor="tts-file-speaker-hint">Speaker hint</label>
-              <input
-                id="tts-file-speaker-hint"
-                value={speakerHint}
-                onChange={(event) => setSpeakerHint(event.target.value)}
-                placeholder="support_agent"
-              />
-            </div>
+            ) : (
+              <div className="control-grid">
+                <div className="field-group">
+                  <label htmlFor="tts-file-speed">Speed</label>
+                  <div className="range-row">
+                    <input
+                      id="tts-file-speed"
+                      type="range"
+                      min="0.7"
+                      max="1.3"
+                      step="0.05"
+                      value={speed}
+                      onChange={(event) => setSpeed(Number(event.target.value))}
+                    />
+                    <output>{speed.toFixed(2)}x</output>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-emotion">Emotion hint</label>
+                  <select id="tts-file-emotion" value={emotion} onChange={(event) => setEmotion(event.target.value)}>
+                    <option value="calm">calm</option>
+                    <option value="neutral">neutral</option>
+                    <option value="confident">confident</option>
+                    <option value="urgent">urgent</option>
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-file-speaker-hint">Speaker hint</label>
+                  <input
+                    id="tts-file-speaker-hint"
+                    value={speakerHint}
+                    onChange={(event) => setSpeakerHint(event.target.value)}
+                    placeholder="support_agent"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <button onClick={onSubmit}>Synthesize</button>
-          <p className="muted">Tags are inserted verbatim before the body so you can test your Chatterbox text controls without changing the API contract.</p>
+          <p className="muted">Only the narration body is spoken. Operator notes and model-specific shaping controls stay in metadata so batch synthesis is easier to reason about.</p>
           {response ? (
             <div className="stack">
               <div className="toolbar">
@@ -181,7 +248,7 @@ export function TTSFile() {
                   <strong>{response.session_id}</strong>
                 </div>
                 <div className="meta-card">
-                  <span className="label">Artifact URI</span>
+                  <span className="label">Playback URL</span>
                   <strong>{response.audio_url}</strong>
                 </div>
                 <div className="meta-card">
@@ -201,10 +268,14 @@ export function TTSFile() {
               </div>
 
               <div className="detail-section">
-                <h3>Artifacts</h3>
+                <h3>Playback and artifacts</h3>
+                <div className="stream-output-actions">
+                  {canPlayAudio(response.audio_url) ? <audio controls src={response.audio_url} /> : <div className="playback-placeholder"><span className="label">Playback deck</span><strong>Waiting for browser-reachable audio</strong></div>}
+                  <a className="button-link" href={response.audio_url} download={`${response.session_id}.${format}`}>Download</a>
+                </div>
                 <div className="artifact-list">
                   <div className="artifact-row">
-                    <span>audio</span>
+                    <span>playback</span>
                     <code className="inline-code">{response.audio_url}</code>
                   </div>
                   {Object.entries(response.artifacts ?? {}).map(([key, value]) => (
@@ -214,7 +285,6 @@ export function TTSFile() {
                     </div>
                   ))}
                 </div>
-                {canPlayAudio(response.audio_url) ? <audio controls src={response.audio_url} /> : <p className="muted">Direct playback is only available when the artifact URI is browser-reachable. Current object storage URI is preserved for tracing.</p>}
               </div>
             </div>
           ) : null}

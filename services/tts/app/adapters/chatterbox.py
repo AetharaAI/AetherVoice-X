@@ -33,20 +33,28 @@ class ChatterboxAdapter(BaseTTSAdapter):
         return voice_file.rsplit(".", 1)[0]
 
     async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
+        extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
         voice_file = self._resolve_voice_file(request.voice)
         voice_name = self._resolve_voice_name(voice_file)
+        chunk_size = int(extra.get("chunk_size") or 120)
+        split_text = bool(extra.get("split_text", True))
+        language = str(extra.get("language") or "en")
         candidates = [
             (
                 f"{self.base_url}/tts",
                 {
                     "text": request.text,
-                    "voice_mode": "predefined",
+                    "voice_mode": str(extra.get("voice_mode") or "predefined"),
                     "predefined_voice_id": voice_file,
                     "output_format": request.format,
-                    "split_text": True,
-                    "chunk_size": 120,
+                    "split_text": split_text,
+                    "chunk_size": chunk_size,
                     "speed_factor": request.style.speed,
-                    "language": "en",
+                    "language": language,
+                    "temperature": extra.get("temperature"),
+                    "exaggeration": extra.get("exaggeration"),
+                    "cfg_weight": extra.get("cfg_weight"),
+                    "seed": extra.get("seed"),
                 },
             ),
             (
@@ -63,6 +71,8 @@ class ChatterboxAdapter(BaseTTSAdapter):
         last_exc: Exception | None = None
         for url, payload in candidates:
             try:
+                if url.endswith("/tts"):
+                    payload = {key: value for key, value in payload.items() if value is not None}
                 response = await self.client.post(url, json=payload, headers={"Accept": f"audio/{request.format}"})
                 response.raise_for_status()
                 if response.headers.get("content-type", "").startswith("audio/"):

@@ -43,5 +43,5 @@ export function canPlayAudio(url?: string | null): boolean {
   if (!url) {
     return false;
   }
-  return /^(https?:|blob:)/.test(url);
+  return /^(https?:|blob:|\/)/.test(url);
 }

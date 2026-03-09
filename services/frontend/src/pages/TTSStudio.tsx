@@ -82,8 +82,12 @@ function preferredDialogueRoute(routes: StudioRouteDescriptor[]) {
     routes.find((route) => route.name === "moss_ttsd" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.mode === "dialogue" && route.invokable)?.name ??
-    "chatterbox"
+  "chatterbox"
   );
+}
+
+function buildPresetPreviewText(preset: ExamplePreset) {
+  return `AetherPro voice design preview for ${preset.title}. Please confirm the line is stable and operator-ready.`;
 }
 
 export function TTSStudio() {
@@ -100,6 +104,7 @@ export function TTSStudio() {
   const [designName, setDesignName] = useState("Warm Dispatcher");
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
   const [designPreviewText, setDesignPreviewText] = useState("AetherPro dispatch confirms the field team is active and en route.");
+  const [designPresetSummary, setDesignPresetSummary] = useState("Load a preset to seed the name, prompt, and preview text before rendering or saving.");
   const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("moss_voice_generator");
   const [batchText, setBatchText] = useState("AetherPro dispatch confirms the blue relay opens at noon. Maintain line integrity and proceed with the service window.");
   const [batchFormat, setBatchFormat] = useState("wav");
@@ -129,6 +134,11 @@ export function TTSStudio() {
       return [voice.display_name, voice.source_model, voice.runtime_target, ...voice.tags].join(" ").toLowerCase().includes(term);
     });
   }, [voiceFilter, voices]);
+
+  const selectedVoiceDemoText = useMemo(() => {
+    const demo = selectedVoice?.default_params?.demo_sample_text;
+    return typeof demo === "string" ? demo : null;
+  }, [selectedVoice]);
 
   async function refreshOverview() {
     const payload = await fetchStudioOverview();
@@ -263,6 +273,15 @@ export function TTSStudio() {
     }
   }
 
+  function handleVoiceDesignPresetLoad(preset: ExamplePreset) {
+    setDesignName(preset.title);
+    setDesignPrompt(preset.generation_prompt);
+    setDesignPreviewText(buildPresetPreviewText(preset));
+    setDesignPresetSummary(preset.description);
+    setMessage(`Loaded preset: ${preset.title}. Review the prompt, then render a preview or save it into the library.`);
+    setError(null);
+  }
+
   async function handleRoutingSave() {
     setBusyAction("save-routing");
     setError(null);
@@ -331,7 +350,7 @@ export function TTSStudio() {
 
         <div className="studio-tabs">
           {STUDIO_TABS.map((tab) => (
-            <button key={tab} className={tab === activeTab ? "secondary studio-tab active" : "secondary studio-tab"} onClick={() => setActiveTab(tab)}>
+            <button key={tab} className={tab === activeTab ? "secondary studio-tab active" : "secondary studio-tab"} onClick={() => setActiveTab(tab)} title={`Open ${tab}`}>
               {tab}
             </button>
           ))}
@@ -351,9 +370,11 @@ export function TTSStudio() {
                   <strong>{selectedVoice?.display_name ?? "No voice selected"}</strong>
                   <span className="label">{selectedVoice?.runtime_target ?? "unbound"}</span>
                 </div>
+                {selectedVoice?.notes ? <p className="field-hint">{selectedVoice.notes}</p> : null}
+                {selectedVoiceDemoText ? <p className="field-hint"><strong>Demo text:</strong> {selectedVoiceDemoText}</p> : null}
               </div>
             </div>
-            <div className="cards-grid">
+            <div className="studio-voice-grid">
               {filteredVoices.map((voice) => (
                 <article key={voice.voice_id} className="model-card studio-voice-card">
                   <div className="toolbar">
@@ -412,12 +433,21 @@ export function TTSStudio() {
           <section className="stack">
             <details className="accordion" open>
               <summary>Example presets</summary>
-              <div className="preset-chip-grid">
+              <div className="accordion-body">
+                <p className="field-hint">{designPresetSummary}</p>
+                <div className="preset-chip-grid">
                 {(overview?.example_presets ?? []).map((preset) => (
-                  <button key={preset.title} className="secondary preset-chip" onClick={() => handleVoiceDesignSave(preset)} disabled={busyAction === "save-voice"}>
+                  <button
+                    key={preset.title}
+                    className="secondary preset-chip"
+                    onClick={() => handleVoiceDesignPresetLoad(preset)}
+                    title={preset.description}
+                    disabled={busyAction === "save-voice" || busyAction === "generate"}
+                  >
                     {preset.title}
                   </button>
                 ))}
+                </div>
               </div>
             </details>
             <div className="control-grid">

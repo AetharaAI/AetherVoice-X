@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from urllib.parse import quote
 
 import websockets
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 
 from ..clients.tts_client import TTSClient
 from ..config import get_settings
-from ..dependencies import get_auth_context, get_quota_service, get_session_service, get_tts_client
+from ..dependencies import get_auth_context, get_quota_service, get_session_service, get_storage, get_tts_client
 from ..schemas.tts import TTSRequest, TTSResponse, TTSStreamStartRequest, TTSStreamStartResponse
 from ..services.quota_service import QuotaService
 from ..services.router_policy import choose_tts_model
@@ -15,8 +17,13 @@ from ..services.session_service import SessionService
 from ..utils.ids import prefixed_id
 from aether_common.auth import AuthContext, ensure_scopes
 from aether_common.settings import Settings
+from aether_common.storage import StorageManager
 
 router = APIRouter(tags=["tts"])
+
+
+def _browser_artifact_url(storage_uri: str) -> str:
+    return f"/api/v1/tts/artifacts/download?uri={quote(storage_uri, safe='')}"
 
 
 @router.post("/v1/tts/synthesize", response_model=TTSResponse)
@@ -41,6 +48,11 @@ async def synthesize(
     internal_payload["model"] = model_used
     internal_payload["metadata"] = metadata
     result = await tts_client.synthesize(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
+    storage_uri = result["audio_url"]
+    artifacts = dict(result.get("artifacts") or {})
+    artifacts.setdefault("storage_uri", storage_uri)
+    result["artifacts"] = artifacts
+    result["audio_url"] = _browser_artifact_url(storage_uri)
     await session_service.record_request(
         request_id,
         session_id,
@@ -52,9 +64,29 @@ async def synthesize(
         result["timings"],
         fallback_used=result["model_used"] != model_used,
     )
-    await session_service.save_tts_output(session_id, result["model_used"], payload.voice, payload.text, result["audio_url"], result["duration_ms"])
+    await session_service.save_tts_output(session_id, result["model_used"], payload.voice, payload.text, storage_uri, result["duration_ms"])
     result["session_id"] = session_id
     return TTSResponse.model_validate(result)
+
+
+@router.get("/v1/tts/artifacts/download")
+async def download_tts_artifact(
+    uri: str = Query(..., description="Raw storage URI returned by the TTS service."),
+    storage: StorageManager = Depends(get_storage),
+    auth: AuthContext = Depends(get_auth_context),
+) -> Response:
+    ensure_scopes(auth, {"voice:tts"})
+    try:
+        payload = storage.read_bytes(uri)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Artifact not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    filename = Path(uri.split("?", 1)[0]).name or "tts-artifact"
+    headers = {"Content-Disposition": f'inline; filename="{filename}"'}
+    return Response(content=payload, media_type=storage.guess_content_type(uri), headers=headers)
 
 
 @router.post("/v1/tts/stream/start", response_model=TTSStreamStartResponse)
