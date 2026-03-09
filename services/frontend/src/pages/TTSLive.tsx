@@ -119,7 +119,28 @@ export function TTSLive() {
   const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
   const [rawDirectives, setRawDirectives] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
   const liveModels = models.filter((entry) => entry.kind === "tts" && entry.supports_streaming);
-  const liveVoices = voices.filter((voice) => voice.runtime_target === "moss_realtime" || voice.runtime_target === "chatterbox");
+  const liveVoices = useMemo(
+    () =>
+      [...voices].sort((left, right) => {
+        const rank = (voice: StudioVoice) => {
+          if (voice.runtime_target === "moss_realtime") {
+            return 0;
+          }
+          if (voice.source_model === "moss_voice_generator") {
+            return 1;
+          }
+          if (voice.runtime_target === "moss_tts" || voice.runtime_target === "moss_ttsd") {
+            return 2;
+          }
+          if (voice.runtime_target === "chatterbox") {
+            return 3;
+          }
+          return 4;
+        };
+        return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
+      }),
+    [voices]
+  );
   const selectedVoice = liveVoices.find((voice) => voice.voice_id === voiceId) ?? liveVoices[0] ?? null;
   const selectedVoiceAsset = runtimeTruth?.selected_voice_asset ?? selectedVoice?.display_name ?? "MOSS Default Voice";
   const requestedPreset = runtimeTruth?.requested_preset ?? selectedVoice?.voice_id ?? "moss_default";
@@ -245,7 +266,7 @@ export function TTSLive() {
               {liveVoices.length ? (
                 liveVoices.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
-                    {voice.display_name}
+                    {voice.display_name} {voice.runtime_target !== "moss_realtime" ? `(${voice.runtime_target})` : ""}
                   </option>
                 ))
               ) : (

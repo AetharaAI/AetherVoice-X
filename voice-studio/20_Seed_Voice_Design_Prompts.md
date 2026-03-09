@@ -226,7 +226,7 @@ Tags:
 
 ### 21. Faceless YouTube self-mastery narrator
 
-“Calm masculine narrator voice for self-mastery content with deliberate pacing, emotional restraint, and cinematic seriousness.”
+“![alt text](image.png)”
 
 ### 22. Viral history shorts narrator
 

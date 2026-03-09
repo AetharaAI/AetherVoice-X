@@ -86,13 +86,14 @@ button {
   border: none;
   font-weight: 700;
   cursor: pointer;
+  border-radius: 12px;
 }
 
 button.secondary {
   background: rgba(255, 255, 255, 0.08);
   color: inherit;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 10px;
 }
 
 textarea, input, select, pre {
@@ -656,7 +657,7 @@ textarea, input, select, pre {
 
 .studio-tab {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .studio-tab.active {
@@ -695,7 +696,7 @@ textarea, input, select, pre {
 
 .preset-chip {
   padding: 0.65rem 0.95rem;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .studio-voice-grid {
@@ -710,9 +711,23 @@ textarea, input, select, pre {
   gap: 0.9rem;
 }
 
+.voice-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.square-action {
+  border-radius: 10px;
+}
+
 .studio-voice-card .toolbar {
   justify-content: space-between;
   align-items: flex-start;
+}
+
+.studio-card-details {
+  margin-top: 0.15rem;
 }
 
 .studio-voice-card h3,

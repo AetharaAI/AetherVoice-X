@@ -68,6 +68,15 @@ function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
   );
 }
 
+function preferredVoiceDesignRoute(routes: StudioRouteDescriptor[]) {
+  return (
+    routes.find((route) => route.name === "moss_voice_generator" && route.invokable)?.name ??
+    routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
+    routes.find((route) => route.mode === "voice-design")?.name ??
+    "moss_voice_generator"
+  );
+}
+
 function preferredBatchRoute(routes: StudioRouteDescriptor[]) {
   return (
     routes.find((route) => route.name === "moss_tts" && route.invokable)?.name ??
@@ -88,6 +97,17 @@ function preferredDialogueRoute(routes: StudioRouteDescriptor[]) {
 
 function buildPresetPreviewText(preset: ExamplePreset) {
   return `AetherPro voice design preview for ${preset.title}. Please confirm the line is stable and operator-ready.`;
+}
+
+function designPreviewTextForVoice(voice: StudioVoice) {
+  const demo = voice.default_params?.demo_sample_text;
+  if (typeof demo === "string" && demo.trim()) {
+    return demo.trim();
+  }
+  if (voice.reference_text?.trim()) {
+    return voice.reference_text.trim();
+  }
+  return `Previewing ${voice.display_name} for operator readiness and studio voice quality.`;
 }
 
 export function TTSStudio() {
@@ -123,6 +143,10 @@ export function TTSStudio() {
 
   const routes = overview?.routes ?? [];
   const voices = overview?.voices ?? [];
+  const voiceDesignRoutes = useMemo(
+    () => routes.filter((route) => route.name === "moss_voice_generator" || route.name === "chatterbox"),
+    [routes]
+  );
   const selectedRoute = routes.find((route) => route.name === routeTarget) ?? null;
   const selectedVoice = voices.find((voice) => voice.voice_id === selectedVoiceId) ?? null;
   const filteredVoices = useMemo(() => {
@@ -155,8 +179,8 @@ export function TTSStudio() {
     if (!payload.routes.some((route) => route.name === dialogueRoute && route.invokable)) {
       setDialogueRoute(preferredDialogueRoute(payload.routes));
     }
-    if (!payload.routes.some((route) => route.name === designRoute)) {
-      setDesignRoute(preferredStudioRoute(payload.routes));
+    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "moss_voice_generator" || route.name === "chatterbox"))) {
+      setDesignRoute(preferredVoiceDesignRoute(payload.routes));
     }
     setProvider(payload.routing.provider);
     setSelectedProviderModel(payload.routing.model ?? "");
@@ -181,6 +205,43 @@ export function TTSStudio() {
       })
       .catch(() => setProviderModels([]));
   }, [overview, provider, selectedProviderModel]);
+
+  useEffect(() => {
+    if (!voiceDesignRoutes.length) {
+      return;
+    }
+    if (!voiceDesignRoutes.some((route) => route.name === designRoute)) {
+      setDesignRoute(preferredVoiceDesignRoute(routes));
+    }
+  }, [designRoute, routes, voiceDesignRoutes]);
+
+  const selectedDesignRoute = voiceDesignRoutes.find((route) => route.name === designRoute) ?? null;
+  const designPreviewRouteTruth =
+    designRoute === "moss_voice_generator"
+      ? "Voice Generator preview. Generated timbre should reflect the design prompt when the sidecar is healthy."
+      : "Fallback preview. This lets you audition text/audio flow, but it is not true voice-generation conditioning.";
+
+  function handleVoiceLibrarySelect(voice: StudioVoice) {
+    setSelectedVoiceId(voice.voice_id);
+    setMessage(`Selected ${voice.display_name}.`);
+    setError(null);
+  }
+
+  function handleVoiceLibraryLoadIntoDesign(voice: StudioVoice) {
+    setSelectedVoiceId(voice.voice_id);
+    setActiveTab("Voice Design");
+    setDesignName(voice.display_name);
+    setDesignPrompt(voice.generation_prompt?.trim() ? voice.generation_prompt : voice.notes ?? designPrompt);
+    setDesignPreviewText(designPreviewTextForVoice(voice));
+    setDesignPresetSummary(
+      voice.generation_prompt
+        ? `Loaded ${voice.display_name} from the registry. Review the prompt and render a preview before saving changes.`
+        : `Loaded ${voice.display_name} from the registry. This record has no generation prompt, so preview will use the current description text until you refine it.`
+    );
+    setDesignRoute(voice.source_model === "moss_voice_generator" ? "moss_voice_generator" : preferredVoiceDesignRoute(routes));
+    setMessage(`Loaded ${voice.display_name} into Voice Design.`);
+    setError(null);
+  }
 
   async function runBatchGeneration(
     text: string,
@@ -362,7 +423,7 @@ export function TTSStudio() {
               <div className="field-group">
                 <label htmlFor="voice-library-search">Search voices</label>
                 <input id="voice-library-search" value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value)} placeholder="Search preset, cloned, generated, imported..." />
-                <p className="field-hint">Seed voices are loaded automatically from the repo-backed studio seed library when present. You do not need to recreate them manually.</p>
+                <p className="field-hint">Seed voices are loaded automatically from the repo-backed studio seed library when present. Use a card action to load a voice into Voice Design or mark it as the current working voice.</p>
               </div>
               <div className="field-group">
                 <label>Current selection</label>
@@ -372,6 +433,16 @@ export function TTSStudio() {
                 </div>
                 {selectedVoice?.notes ? <p className="field-hint">{selectedVoice.notes}</p> : null}
                 {selectedVoiceDemoText ? <p className="field-hint"><strong>Demo text:</strong> {selectedVoiceDemoText}</p> : null}
+                {selectedVoice ? (
+                  <div className="toolbar">
+                    <button className="secondary compact-button square-action" onClick={() => handleVoiceLibrarySelect(selectedVoice)}>
+                      Select asset
+                    </button>
+                    <button className="secondary compact-button square-action" onClick={() => handleVoiceLibraryLoadIntoDesign(selectedVoice)}>
+                      Open in Voice Design
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="studio-voice-grid">
@@ -382,17 +453,31 @@ export function TTSStudio() {
                     <Badge value={voice.type} tone={voiceTone(voice.type)} />
                   </div>
                   <p className="field-hint">{voice.notes ?? "Reusable voice asset for OpenMOSS and fallback batch routes."}</p>
-                  <div className="artifact-list">
-                    <div className="artifact-row"><span>voice id</span><code className="inline-code">{voice.voice_id}</code></div>
-                    <div className="artifact-row"><span>source model</span><code className="inline-code">{voice.source_model}</code></div>
-                    <div className="artifact-row"><span>runtime target</span><code className="inline-code">{voice.runtime_target}</code></div>
-                    {voice.reference_audio_path ? <div className="artifact-row"><span>reference</span><code className="inline-code">{voice.reference_audio_path}</code></div> : null}
+                  <div className="voice-card-actions">
+                    <button className="secondary compact-button square-action" onClick={() => handleVoiceLibrarySelect(voice)}>
+                      Select asset
+                    </button>
+                    <button className="secondary compact-button square-action" onClick={() => handleVoiceLibraryLoadIntoDesign(voice)}>
+                      Open in Voice Design
+                    </button>
                   </div>
-                  <div className="toolbar">
-                    {voice.tags.map((tag) => (
-                      <Badge key={`${voice.voice_id}-${tag}`} value={tag} />
-                    ))}
-                  </div>
+                  <details className="accordion studio-card-details">
+                    <summary>Voice record details</summary>
+                    <div className="accordion-body">
+                      <div className="artifact-list">
+                        <div className="artifact-row"><span>voice id</span><code className="inline-code">{voice.voice_id}</code></div>
+                        <div className="artifact-row"><span>source model</span><code className="inline-code">{voice.source_model}</code></div>
+                        <div className="artifact-row"><span>runtime target</span><code className="inline-code">{voice.runtime_target}</code></div>
+                        {voice.reference_audio_path ? <div className="artifact-row"><span>reference</span><code className="inline-code">{voice.reference_audio_path}</code></div> : null}
+                        {voice.generation_prompt ? <div className="artifact-row"><span>generation prompt</span><code className="inline-code">{voice.generation_prompt}</code></div> : null}
+                      </div>
+                      <div className="toolbar">
+                        {voice.tags.map((tag) => (
+                          <Badge key={`${voice.voice_id}-${tag}`} value={tag} />
+                        ))}
+                      </div>
+                    </div>
+                  </details>
                 </article>
               ))}
             </div>
@@ -458,14 +543,13 @@ export function TTSStudio() {
               <div className="field-group">
                 <label htmlFor="voice-design-route">Runtime target</label>
                 <select id="voice-design-route" value={designRoute} onChange={(event) => setDesignRoute(event.target.value as StudioRouteDescriptor["name"])}>
-                  {routes
-                    .filter((route) => route.name === "moss_voice_generator" || route.name === "moss_realtime" || route.name === "moss_ttsd")
-                    .map((route) => (
+                  {voiceDesignRoutes.map((route) => (
                       <option key={route.name} value={route.name}>
                         {routeLabel(route)}
                       </option>
                     ))}
                 </select>
+                <p className="field-hint">{designPreviewRouteTruth}</p>
               </div>
             </div>
             <details className="accordion" open>
@@ -495,7 +579,7 @@ export function TTSStudio() {
                     successMessage: "Voice design preview rendered."
                   })
                 }
-                disabled={busyAction === "generate" || !routes.find((route) => route.name === designRoute)?.invokable}
+                disabled={busyAction === "generate" || !selectedDesignRoute?.invokable}
               >
                 {busyAction === "generate" ? "Rendering preview..." : "Render design preview"}
               </button>
