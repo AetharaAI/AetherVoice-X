@@ -246,13 +246,15 @@ class StudioService:
         force_disabled: bool = False,
     ) -> RouteDescriptor:
         present_on_disk = self._model_exists(leaf) if leaf else False
+        endpoint_ready = self._endpoint_ready(endpoint) if endpoint else False
+        configured = bool(endpoint) if leaf is None else present_on_disk or bool(endpoint)
         if force_disabled:
             status = "disabled" if present_on_disk or leaf is not None else "missing"
             invokable = False
-        elif runtime_wired and ((not requires_endpoint) or endpoint):
-            status = "ready" if present_on_disk or leaf is None else "missing"
-            invokable = status == "ready"
-        elif present_on_disk:
+        elif runtime_wired and endpoint_ready and ((present_on_disk or leaf is None) or not requires_endpoint):
+            status = "ready"
+            invokable = True
+        elif configured:
             status = "staged"
             invokable = False
         else:
@@ -264,12 +266,21 @@ class StudioService:
             mode=mode,
             status=status,
             present_on_disk=present_on_disk if leaf else bool(endpoint),
-            runtime_wired=runtime_wired,
+            runtime_wired=runtime_wired and endpoint_ready if requires_endpoint or endpoint else runtime_wired,
             invokable=invokable,
             model_path=str(self._canonical_model_path(leaf)) if leaf else None,
             notes=notes,
             fallback_target=fallback_target,
         )
+
+    def _endpoint_ready(self, endpoint: str | None) -> bool:
+        if not endpoint:
+            return False
+        try:
+            response = httpx.get(f"{endpoint.rstrip('/')}/health", timeout=2.5)
+            return response.is_success
+        except Exception:
+            return False
 
     def _route_catalog(self) -> list[RouteDescriptor]:
         return [
@@ -289,8 +300,10 @@ class StudioService:
                 label="OpenMOSS TTS",
                 mode="batch",
                 leaf="MOSS-TTS",
-                force_disabled=True,
-                notes="Base MOSS TTS is intentionally disabled in the UI for this pass. The model is still downloading / not ready for invocation, so batch narration stays on truthful fallback paths.",
+                requires_endpoint=True,
+                endpoint=self.settings.moss_tts_base_url,
+                runtime_wired=True,
+                notes="Single-speaker OpenMOSS batch synthesis route. Truth stays tied to both the canonical weights and a live sidecar health check.",
                 fallback_target="chatterbox",
             ),
             self._route_descriptor(
@@ -298,7 +311,10 @@ class StudioService:
                 label="OpenMOSS TTSD",
                 mode="dialogue",
                 leaf="MOSS-TTSD-v1.0",
-                notes="TTSD weights are visible to the studio, but the runtime adapter is not wired yet. The route is staged, not invokable.",
+                requires_endpoint=True,
+                endpoint=self.settings.moss_ttsd_base_url,
+                runtime_wired=True,
+                notes="Dialogue-focused OpenMOSS route for multi-speaker scenes. Readiness only flips when the TTSD sidecar is healthy.",
                 fallback_target="chatterbox",
             ),
             self._route_descriptor(
@@ -306,7 +322,10 @@ class StudioService:
                 label="OpenMOSS Voice Generator",
                 mode="voice-design",
                 leaf="MOSS-VoiceGenerator",
-                notes="VoiceGenerator is the safest default path for studio voice-creation testing. In this pass it is registry-backed for presets, while runtime execution remains staged.",
+                requires_endpoint=True,
+                endpoint=self.settings.moss_voice_generator_base_url,
+                runtime_wired=True,
+                notes="VoiceGenerator is the safest default path for studio voice-creation testing. It becomes invokable only when the dedicated sidecar is healthy.",
             ),
             self._route_descriptor(
                 name="chatterbox",
@@ -314,6 +333,7 @@ class StudioService:
                 mode="batch",
                 leaf=None,
                 endpoint=self.settings.chatterbox_base_url,
+                requires_endpoint=True,
                 runtime_wired=bool(self.settings.chatterbox_base_url),
                 notes="Existing stable batch fallback preserved for compatibility.",
             ),

@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     storage.ensure_bucket(settings.s3_bucket_tts)
     registry = ModelRegistry()
     studio_service = StudioService(settings)
-    synthesis_service = SynthesisService(registry, storage, settings)
+    synthesis_service = SynthesisService(registry, storage, settings, studio_service)
     app.state.db = db
     app.state.redis = redis
     app.state.storage = storage

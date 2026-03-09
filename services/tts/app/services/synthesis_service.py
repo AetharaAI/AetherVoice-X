@@ -10,14 +10,16 @@ from ..logging import logger
 from ..pipeline.orchestrator import build_input
 from ..schemas.requests import TTSRequest
 from ..schemas.responses import TTSResult, TimingBreakdown
+from .studio_service import StudioService
 from .model_registry import ModelRegistry
 
 
 class SynthesisService:
-    def __init__(self, registry: ModelRegistry, storage: StorageManager, settings) -> None:
+    def __init__(self, registry: ModelRegistry, storage: StorageManager, settings, studio_service: StudioService) -> None:
         self.registry = registry
         self.storage = storage
         self.settings = settings
+        self.studio_service = studio_service
 
     def _estimate_duration_ms(self, audio_bytes: bytes) -> int:
         try:
@@ -26,14 +28,48 @@ class SynthesisService:
         except Exception:
             return 0
 
+    def _resolve_voice_metadata(self, request: TTSRequest) -> dict:
+        voices = {voice.voice_id: voice for voice in self.studio_service.list_voices(request.tenant_id)}
+        selected = voices.get(request.voice) or voices.get("moss_default") or voices.get("chatterbox_default")
+        extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
+        if selected is None:
+            return extra
+        resolved_voice = selected.model_dump(exclude_none=True)
+        extra.setdefault("resolved_voice", resolved_voice)
+        extra.setdefault("selected_voice_id", selected.voice_id)
+        extra.setdefault("selected_voice_asset", selected.display_name)
+        if selected.reference_audio_path:
+            extra.setdefault("reference_audio_path", selected.reference_audio_path)
+        if selected.reference_text:
+            extra.setdefault("reference_text", selected.reference_text)
+        if selected.generation_prompt:
+            extra.setdefault("generation_prompt", selected.generation_prompt)
+        if request.model == "moss_ttsd" and selected.reference_audio_path:
+            extra.setdefault(
+                "speaker_references",
+                [
+                    {
+                        "speaker": "S1",
+                        "audio_path": selected.reference_audio_path,
+                        "prompt_text": selected.reference_text or "",
+                        "voice_id": selected.voice_id,
+                    }
+                ],
+            )
+        return extra
+
     async def synthesize(self, request: TTSRequest) -> tuple[TTSResult, bytes]:
         started = __import__("time").perf_counter()
         text, voice = build_input(request.text, request.voice)
-        prepared = request.model_copy(update={"text": text, "voice": voice})
+        metadata = dict(request.metadata)
+        metadata["extra"] = self._resolve_voice_metadata(request)
+        prepared = request.model_copy(update={"text": text, "voice": voice, "metadata": metadata})
         try:
             adapter = self.registry.get(request.model)
         except KeyError:
             adapter = self.registry.fallback_batch()
+        selected_voice = (prepared.metadata.get("extra") or {}).get("resolved_voice") if isinstance(prepared.metadata, dict) else None
+        fallback_route_used: str | None = None
         try:
             audio_bytes, output_format = await adapter.synthesize(prepared)
         except Exception as exc:
@@ -41,6 +77,7 @@ class SynthesisService:
                 fallback = self.registry.fallback_batch()
                 voice_model_fallback_total.labels(service="tts", requested=request.model, used=fallback.name).inc()
                 audio_bytes, output_format = await fallback.synthesize(prepared.model_copy(update={"model": fallback.name}))
+                fallback_route_used = fallback.name
                 adapter = fallback
             else:
                 raise exc
@@ -68,7 +105,18 @@ class SynthesisService:
                 audio_url=audio_url,
                 duration_ms=duration_ms,
                 timings=timings,
-                artifacts={"format": output_format},
+                artifacts={
+                    "format": output_format,
+                    "selected_voice_id": selected_voice.get("voice_id") if isinstance(selected_voice, dict) else prepared.voice,
+                    "selected_voice_asset": selected_voice.get("display_name") if isinstance(selected_voice, dict) else prepared.voice,
+                    "resolved_conditioning_asset": (prepared.metadata.get("extra") or {}).get("reference_audio_path")
+                    or (prepared.metadata.get("extra") or {}).get("generation_prompt"),
+                    "actual_runtime_conditioning_source": (prepared.metadata.get("extra") or {}).get("reference_audio_path")
+                    or (prepared.metadata.get("extra") or {}).get("generation_prompt")
+                    or "default",
+                    "fallback_route_used": fallback_route_used,
+                    "requested_model": request.model,
+                },
             ),
             audio_bytes,
         )

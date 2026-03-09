@@ -105,7 +105,7 @@ general_settings:
   app_id: aether-os-web
   disable_auth: true
   enable_key_management: true
-#  database_url: "postgresql://litellm_admin:litellm_admin_ops_2026@100.87.16.38:5440/litellm"
+#  database_url: "postgresql://litellm_admin:litellm_admin_2026_infra@100.87.16.38:5432/litellm"
 #  store_model_in_db: true
   use_redis_transaction_buffer: true
   redis_url: redis://redis:6379/0

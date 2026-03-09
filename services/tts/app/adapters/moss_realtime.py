@@ -20,13 +20,18 @@ class MossRealtimeAdapter(BaseTTSAdapter):
         self.timeout_seconds = timeout_seconds
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.base_url else None
         self.configured = bool(self.base_url)
-        self.ready = False
-        if self.base_url:
-            try:
-                response = httpx.get(f"{self.base_url}/health", timeout=min(timeout_seconds, 3.0))
-                self.ready = response.is_success
-            except Exception:
-                self.ready = False
+        self.ready = self.refresh_health()
+
+    def refresh_health(self) -> bool:
+        if not self.base_url:
+            self.ready = False
+            return self.ready
+        try:
+            response = httpx.get(f"{self.base_url}/health", timeout=min(self.timeout_seconds, 3.0))
+            self.ready = response.is_success
+        except Exception:
+            self.ready = False
+        return self.ready
 
     async def close(self) -> None:
         if self.client is not None:
