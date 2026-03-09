@@ -105,7 +105,7 @@ function TypewriterStatus({ text, active }: { text: string; active: boolean }) {
 }
 
 export function TTSLive() {
-  const { connected, connectionLabel, sessionId, wsUrl, modelUsed, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop } = useTTSStream();
+  const { connected, connectionLabel, sessionId, wsUrl, modelUsed, runtimeTruth, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop } = useTTSStream();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [voices, setVoices] = useState<StudioVoice[]>([]);
   const [model, setModel] = useState("moss_realtime");
@@ -121,6 +121,11 @@ export function TTSLive() {
   const liveModels = models.filter((entry) => entry.kind === "tts" && entry.supports_streaming);
   const liveVoices = voices.filter((voice) => voice.runtime_target === "moss_realtime" || voice.runtime_target === "chatterbox");
   const selectedVoice = liveVoices.find((voice) => voice.voice_id === voiceId) ?? liveVoices[0] ?? null;
+  const selectedVoiceAsset = runtimeTruth?.selected_voice_asset ?? selectedVoice?.display_name ?? "MOSS Default Voice";
+  const requestedPreset = runtimeTruth?.requested_preset ?? selectedVoice?.voice_id ?? "moss_default";
+  const runtimeConditioning = runtimeTruth?.actual_runtime_conditioning_source ?? "pending";
+  const fallbackVoicePath = runtimeTruth?.fallback_voice_path ?? "none";
+  const runtimePathUsed = runtimeTruth?.runtime_path_used ?? modelUsed ?? model;
   const hasFinalAudio = Boolean(finalUrl);
   const liveTone = connectionTone(connectionLabel, hasFinalAudio);
   const busy =
@@ -247,7 +252,11 @@ export function TTSLive() {
                 <option value="moss_default">MOSS Default Voice</option>
               )}
             </select>
-            <p className="field-hint">This binds a registry voice record to the session instead of prepending pseudo-tags into the spoken text.</p>
+            <p className="field-hint">
+              {runtimeTruth?.conditioning_active
+                ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
+                : "This binds a registry voice record to the session, but realtime inference is still using the current default conditioning path until per-session conditioning lands."}
+            </p>
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-sample-rate">Sample rate</label>
@@ -311,16 +320,24 @@ export function TTSLive() {
             <strong>{sessionId ?? "none"}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Voice binding</span>
-            <strong>{selectedVoice?.display_name ?? "MOSS Default Voice"}</strong>
+            <span className="label">Selected voice asset</span>
+            <strong>{selectedVoiceAsset}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Route target</span>
-            <strong>{modelUsed ?? model}</strong>
+            <span className="label">Requested preset</span>
+            <strong>{requestedPreset}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Chunks</span>
-            <strong>{chunkCount}</strong>
+            <span className="label">Runtime conditioning</span>
+            <strong className="meta-value-wrap">{runtimeConditioning}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Fallback voice path</span>
+            <strong className="meta-value-wrap">{fallbackVoicePath}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Runtime path used</span>
+            <strong>{runtimePathUsed}</strong>
           </div>
           <div className="meta-card">
             <span className="label">WebSocket contract</span>
@@ -395,8 +412,8 @@ export function TTSLive() {
             tone={error ? "danger" : hasFinalAudio ? "good" : "default"}
           />
           <div className="artifact-list">
-            {events.map((event) => (
-              <div key={event} className="artifact-row">
+            {events.map((event, index) => (
+              <div key={`${index}-${event}`} className="artifact-row">
                 <span>{event}</span>
               </div>
             ))}

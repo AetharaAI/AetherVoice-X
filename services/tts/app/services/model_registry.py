@@ -44,7 +44,7 @@ class ModelRegistry:
                 "status": (
                     "ready"
                     if adapter.name == "chatterbox" or getattr(adapter, "ready", False)
-                    else ("configured" if getattr(adapter, "configured", False) else "scaffold")
+                    else "unavailable"
                 ),
                 "features": ["http_passthrough"] if adapter.name == "chatterbox" else ["realtime", "adapter_driven_streaming"],
                 "route_priority": 10 if adapter.name == "moss_realtime" else 20,

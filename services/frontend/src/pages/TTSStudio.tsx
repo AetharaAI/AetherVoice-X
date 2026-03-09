@@ -24,10 +24,10 @@ function routeTone(status: StudioRouteDescriptor["status"]) {
   if (status === "ready") {
     return "good" as const;
   }
-  if (status === "configured") {
+  if (status === "staged") {
     return "warn" as const;
   }
-  if (status === "missing") {
+  if (status === "disabled" || status === "missing") {
     return "danger" as const;
   }
   return "default" as const;
@@ -51,10 +51,29 @@ function flattenDialogueScript(script: string) {
     .join(" ");
 }
 
+function routeLabel(route: StudioRouteDescriptor) {
+  if (route.invokable) {
+    return route.label;
+  }
+  return `${route.label} (${route.status})`;
+}
+
+function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
+  return routes.find((route) => route.name === "moss_voice_generator")?.name ?? routes.find((route) => route.invokable)?.name ?? routes[0]?.name ?? "moss_voice_generator";
+}
+
+function preferredBatchRoute(routes: StudioRouteDescriptor[]) {
+  return routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ?? routes.find((route) => route.mode === "batch" && route.invokable)?.name ?? "chatterbox";
+}
+
+function preferredDialogueRoute(routes: StudioRouteDescriptor[]) {
+  return routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ?? routes.find((route) => route.mode === "dialogue" && route.invokable)?.name ?? "chatterbox";
+}
+
 export function TTSStudio() {
   const [overview, setOverview] = useState<StudioOverview | null>(null);
   const [activeTab, setActiveTab] = useState<StudioTab>("Voice Library");
-  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("moss_tts");
+  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("moss_voice_generator");
   const [selectedVoiceId, setSelectedVoiceId] = useState("moss_default");
   const [saveToLibrary, setSaveToLibrary] = useState(true);
   const [voiceFilter, setVoiceFilter] = useState("");
@@ -64,10 +83,12 @@ export function TTSStudio() {
   const [cloneNotes, setCloneNotes] = useState("Imported reference voice for future MOSS cloning runs.");
   const [designName, setDesignName] = useState("Warm Dispatcher");
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
-  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("moss_realtime");
+  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("moss_voice_generator");
   const [batchText, setBatchText] = useState("AetherPro dispatch confirms the blue relay opens at noon. Maintain line integrity and proceed with the service window.");
   const [batchFormat, setBatchFormat] = useState("wav");
+  const [batchRoute, setBatchRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
   const [dialogueScript, setDialogueScript] = useState("[Narrator] The line stabilizes.\n[Dispatcher] A technician is being dispatched to your location now.");
+  const [dialogueRoute, setDialogueRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
   const [provider, setProvider] = useState<"openai" | "openrouter" | "litellm" | "anthropic">("litellm");
   const [providerModels, setProviderModels] = useState<LLMProviderModel[]>([]);
   const [selectedProviderModel, setSelectedProviderModel] = useState("");
@@ -96,10 +117,19 @@ export function TTSStudio() {
     const payload = await fetchStudioOverview();
     setOverview(payload);
     if (!payload.routes.some((route) => route.name === routeTarget)) {
-      setRouteTarget(payload.routes[0]?.name ?? "moss_tts");
+      setRouteTarget(preferredStudioRoute(payload.routes));
     }
     if (!payload.voices.some((voice) => voice.voice_id === selectedVoiceId)) {
       setSelectedVoiceId(payload.voices[0]?.voice_id ?? "moss_default");
+    }
+    if (!payload.routes.some((route) => route.name === batchRoute && route.invokable)) {
+      setBatchRoute(preferredBatchRoute(payload.routes));
+    }
+    if (!payload.routes.some((route) => route.name === dialogueRoute && route.invokable)) {
+      setDialogueRoute(preferredDialogueRoute(payload.routes));
+    }
+    if (!payload.routes.some((route) => route.name === designRoute)) {
+      setDesignRoute(preferredStudioRoute(payload.routes));
     }
     setProvider(payload.routing.provider);
     setSelectedProviderModel(payload.routing.model ?? "");
@@ -161,8 +191,8 @@ export function TTSStudio() {
       const form = new FormData();
       form.set("file", cloneFile);
       form.set("display_name", cloneName);
-      form.set("source_model", "moss_tts");
-      form.set("runtime_target", "moss_tts");
+      form.set("source_model", "moss_voice_generator");
+      form.set("runtime_target", "moss_voice_generator");
       form.set("notes", cloneNotes);
       form.set("tags", cloneTags);
       const voice = await importStudioVoice(form);
@@ -240,13 +270,13 @@ export function TTSStudio() {
           <div className="studio-hero-actions">
             <div className="field-group">
               <label htmlFor="studio-route-target">Active route</label>
-              <select id="studio-route-target" value={routeTarget} onChange={(event) => setRouteTarget(event.target.value as StudioRouteDescriptor["name"])}>
-                {routes.map((route) => (
-                  <option key={route.name} value={route.name}>
-                    {route.label}
-                  </option>
-                ))}
-              </select>
+                <select id="studio-route-target" value={routeTarget} onChange={(event) => setRouteTarget(event.target.value as StudioRouteDescriptor["name"])}>
+                  {routes.map((route) => (
+                    <option key={route.name} value={route.name} disabled={route.status === "disabled"}>
+                      {routeLabel(route)}
+                    </option>
+                  ))}
+                </select>
             </div>
             <div className="field-group">
               <label htmlFor="studio-selected-voice">Selected voice</label>
@@ -285,6 +315,7 @@ export function TTSStudio() {
               <div className="field-group">
                 <label htmlFor="voice-library-search">Search voices</label>
                 <input id="voice-library-search" value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value)} placeholder="Search preset, cloned, generated, imported..." />
+                <p className="field-hint">Seed voices are loaded automatically from the repo-backed studio seed library when present. You do not need to recreate them manually.</p>
               </div>
               <div className="field-group">
                 <label>Current selection</label>
@@ -369,9 +400,13 @@ export function TTSStudio() {
               <div className="field-group">
                 <label htmlFor="voice-design-route">Runtime target</label>
                 <select id="voice-design-route" value={designRoute} onChange={(event) => setDesignRoute(event.target.value as StudioRouteDescriptor["name"])}>
-                  <option value="moss_realtime">moss_realtime</option>
-                  <option value="moss_tts">moss_tts</option>
-                  <option value="moss_ttsd">moss_ttsd</option>
+                  {routes
+                    .filter((route) => route.name === "moss_voice_generator" || route.name === "moss_realtime" || route.name === "moss_ttsd")
+                    .map((route) => (
+                      <option key={route.name} value={route.name}>
+                        {routeLabel(route)}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -393,10 +428,10 @@ export function TTSStudio() {
             <div className="control-grid">
               <div className="field-group">
                 <label htmlFor="batch-route">Batch route</label>
-                <select id="batch-route" value={routeTarget} onChange={(event) => setRouteTarget(event.target.value as StudioRouteDescriptor["name"])}>
-                  {routes.filter((route) => route.mode === "batch" || route.name === "moss_tts").map((route) => (
-                    <option key={route.name} value={route.name}>
-                      {route.label}
+                <select id="batch-route" value={batchRoute} onChange={(event) => setBatchRoute(event.target.value as StudioRouteDescriptor["name"])}>
+                  {routes.filter((route) => route.mode === "batch").map((route) => (
+                    <option key={route.name} value={route.name} disabled={!route.invokable}>
+                      {routeLabel(route)}
                     </option>
                   ))}
                 </select>
@@ -413,10 +448,10 @@ export function TTSStudio() {
               <summary>Narration body</summary>
               <div className="accordion-body">
                 <textarea value={batchText} onChange={(event) => setBatchText(event.target.value)} rows={8} />
-                <p className="field-hint">Use this for long-form single-speaker generation. If the chosen MOSS batch lane is still staged, the backend preserves the existing Chatterbox fallback instead of failing cold.</p>
+                <p className="field-hint">Use this for long-form single-speaker generation. Only invokable routes are selectable here; `moss_tts` stays disabled until the base weights are fully ready.</p>
               </div>
             </details>
-            <button onClick={() => runBatchGeneration(batchText, routeTarget)} disabled={busyAction === "generate"}>
+            <button onClick={() => runBatchGeneration(batchText, batchRoute)} disabled={busyAction === "generate"}>
               {busyAction === "generate" ? "Generating narration..." : "Generate narration"}
             </button>
           </section>
@@ -427,10 +462,10 @@ export function TTSStudio() {
             <div className="control-grid">
               <div className="field-group">
                 <label htmlFor="dialogue-route">Dialogue route</label>
-                <select id="dialogue-route" value={routeTarget} onChange={(event) => setRouteTarget(event.target.value as StudioRouteDescriptor["name"])}>
+                <select id="dialogue-route" value={dialogueRoute} onChange={(event) => setDialogueRoute(event.target.value as StudioRouteDescriptor["name"])}>
                   {routes.filter((route) => route.mode === "dialogue" || route.name === "chatterbox").map((route) => (
-                    <option key={route.name} value={route.name}>
-                      {route.label}
+                    <option key={route.name} value={route.name} disabled={!route.invokable}>
+                      {routeLabel(route)}
                     </option>
                   ))}
                 </select>
@@ -447,10 +482,10 @@ export function TTSStudio() {
               <summary>Scene script</summary>
               <div className="accordion-body">
                 <textarea value={dialogueScript} onChange={(event) => setDialogueScript(event.target.value)} rows={8} />
-                <p className="field-hint">TTSD is the target route for multi-speaker scenes. Until that adapter is wired, this tab still lets you shape scripts and fall back cleanly for preview output.</p>
+                <p className="field-hint">TTSD is visible here for truth, but only invokable dialogue routes are selectable. Use this tab for scene shaping while TTSD runtime stays staged.</p>
               </div>
             </details>
-            <button onClick={() => runBatchGeneration(flattenDialogueScript(dialogueScript), routeTarget)} disabled={busyAction === "generate"}>
+            <button onClick={() => runBatchGeneration(flattenDialogueScript(dialogueScript), dialogueRoute)} disabled={busyAction === "generate"}>
               {busyAction === "generate" ? "Rendering dialogue..." : "Render dialogue preview"}
             </button>
           </section>

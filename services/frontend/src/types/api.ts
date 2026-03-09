@@ -134,6 +134,23 @@ export interface StreamStartResponse {
   model_requested?: string | null;
   model_used?: string | null;
   fallback_used?: boolean;
+  runtime?: TTSStreamRuntimeTruth;
+}
+
+export interface TTSStreamRuntimeTruth {
+  requested_route?: string | null;
+  runtime_path_used: string;
+  live_chunk_source_route: string;
+  final_artifact_source_route: string;
+  selected_voice_id?: string | null;
+  selected_voice_asset?: string | null;
+  requested_preset?: string | null;
+  resolved_conditioning_asset?: string | null;
+  actual_runtime_conditioning_source: string;
+  conditioning_active: boolean;
+  fallback_route_used?: string | null;
+  fallback_voice_path?: string | null;
+  notes: string[];
 }
 
 export interface StudioVoice {
@@ -157,7 +174,10 @@ export interface StudioRouteDescriptor {
   name: "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
   label: string;
   mode: "stream" | "batch" | "dialogue" | "voice-design";
-  status: "ready" | "configured" | "staged" | "missing";
+  status: "ready" | "staged" | "disabled" | "missing";
+  present_on_disk: boolean;
+  runtime_wired: boolean;
+  invokable: boolean;
   model_path?: string | null;
   notes?: string | null;
   fallback_target?: string | null;

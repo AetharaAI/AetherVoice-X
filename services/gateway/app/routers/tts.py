@@ -78,8 +78,15 @@ async def start_tts_stream(
     internal_payload = payload.model_dump()
     internal_payload["model"] = model_used
     internal_payload["metadata"] = metadata
-    await tts_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
-    return TTSStreamStartResponse(session_id=session_id, ws_url=f"/api/v1/tts/stream/{session_id}")
+    stream_result = await tts_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
+    return TTSStreamStartResponse(
+        session_id=session_id,
+        ws_url=f"/api/v1/tts/stream/{session_id}",
+        model_requested=payload.model,
+        model_used=stream_result.get("model_used", stream_result.get("model", model_used)),
+        fallback_used=bool(stream_result.get("fallback_used", False)),
+        runtime=dict(stream_result.get("runtime") or {}),
+    )
 
 
 @router.websocket("/api/v1/tts/stream/{session_id}")

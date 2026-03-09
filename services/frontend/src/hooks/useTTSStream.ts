@@ -2,10 +2,64 @@ import { useEffect, useRef, useState } from "react";
 
 import { resolveWsUrl } from "../api/client";
 import { startTTSStream } from "../api/tts";
+import type { TTSStreamRuntimeTruth } from "../types/api";
 
 function b64ToBytes(payload: string) {
   const binary = atob(payload);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function splitRealtimeText(text: string, maxChars = 180): string[] {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return [];
+  }
+  const sentences = normalized.match(/[^.!?]+[.!?]?/g)?.map((entry) => entry.trim()).filter(Boolean) ?? [normalized];
+  const chunks: string[] = [];
+  let current = "";
+
+  const pushLongChunk = (value: string) => {
+    let remaining = value.trim();
+    while (remaining.length > maxChars) {
+      const splitAt = remaining.lastIndexOf(" ", maxChars);
+      const pivot = splitAt > 40 ? splitAt : maxChars;
+      chunks.push(remaining.slice(0, pivot).trim());
+      remaining = remaining.slice(pivot).trim();
+    }
+    if (remaining) {
+      current = remaining;
+    }
+  };
+
+  for (const sentence of sentences) {
+    if (!sentence) {
+      continue;
+    }
+    if (!current) {
+      if (sentence.length <= maxChars) {
+        current = sentence;
+      } else {
+        pushLongChunk(sentence);
+      }
+      continue;
+    }
+    const candidate = `${current} ${sentence}`.trim();
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      continue;
+    }
+    chunks.push(current);
+    current = "";
+    if (sentence.length <= maxChars) {
+      current = sentence;
+    } else {
+      pushLongChunk(sentence);
+    }
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
 }
 
 type ConnectOptions = {
@@ -28,6 +82,7 @@ export function useTTSStream() {
   const [connectionLabel, setConnectionLabel] = useState("idle");
   const [wsUrl, setWsUrl] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
+  const [runtimeTruth, setRuntimeTruth] = useState<TTSStreamRuntimeTruth | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextPlaybackTimeRef = useRef(0);
@@ -36,7 +91,27 @@ export function useTTSStream() {
   const phaseRef = useRef("idle");
 
   function appendEvent(message: string) {
-    setEvents((current) => [...current.slice(-7), message]);
+    setEvents((current) => [...current.slice(-11), message]);
+  }
+
+  function appendRuntimeEvents(runtime: TTSStreamRuntimeTruth) {
+    appendEvent(`selected voice_id · ${runtime.selected_voice_id ?? "none"}`);
+    appendEvent(`requested preset · ${runtime.requested_preset ?? "none"}`);
+    appendEvent(`conditioning asset · ${runtime.resolved_conditioning_asset ?? "none"}`);
+    appendEvent(`runtime conditioning · ${runtime.actual_runtime_conditioning_source}`);
+    appendEvent(`live chunks · ${runtime.live_chunk_source_route}`);
+    appendEvent(`final artifact · ${runtime.final_artifact_source_route}`);
+    appendEvent(`runtime path · ${runtime.runtime_path_used}`);
+    if (runtime.fallback_route_used) {
+      appendEvent(`fallback route · ${runtime.fallback_route_used}`);
+    }
+  }
+
+  function mergeRuntimeTruth(runtime?: TTSStreamRuntimeTruth | null) {
+    if (!runtime) {
+      return;
+    }
+    setRuntimeTruth(runtime);
   }
 
   function setPhase(phase: string) {
@@ -79,7 +154,7 @@ export function useTTSStream() {
     const source = context.createBufferSource();
     source.buffer = decoded;
     source.connect(context.destination);
-    const now = context.currentTime + 0.03;
+    const now = context.currentTime + 0.02;
     const startAt = Math.max(now, nextPlaybackTimeRef.current);
     source.start(startAt);
     nextPlaybackTimeRef.current = startAt + decoded.duration;
@@ -97,6 +172,7 @@ export function useTTSStream() {
     setEvents([]);
     setWsUrl(null);
     setModelUsed(null);
+    setRuntimeTruth(null);
     setPhase("idle");
   }
 
@@ -143,9 +219,13 @@ export function useTTSStream() {
         metadata: options.metadata ?? { source: "console" }
       });
       setSessionId(session.session_id);
-      setModelUsed(options.model);
+      setModelUsed(session.model_used ?? options.model);
       setWsUrl(session.ws_url);
+      mergeRuntimeTruth(session.runtime);
       appendEvent(`stream started · ${session.session_id}`);
+      if (session.runtime) {
+        appendRuntimeEvents(session.runtime);
+      }
       setPhase("opening-socket");
       const socket = new WebSocket(resolveWsUrl(session.ws_url));
       socketRef.current = socket;
@@ -164,10 +244,14 @@ export function useTTSStream() {
         const payload = JSON.parse(message.data) as {
           type: string;
           audio_b64?: string;
-          metadata?: Record<string, string>;
+          metadata?: Record<string, unknown>;
           format?: string;
           message?: string;
         };
+        const runtime = payload.metadata?.runtime as TTSStreamRuntimeTruth | undefined;
+        if (runtime) {
+          mergeRuntimeTruth(runtime);
+        }
         if (payload.type === "error") {
           const detail = payload.message || "TTS stream failed during generation.";
           setError(detail);
@@ -195,7 +279,9 @@ export function useTTSStream() {
           setFinalUrl(url);
           setConnected(false);
           setPhase("final");
-          appendEvent(payload.metadata?.audio_url ? `final audio ready · ${payload.metadata.audio_url}` : "final audio ready");
+          appendEvent(
+            typeof payload.metadata?.audio_url === "string" ? `final audio ready · ${payload.metadata.audio_url}` : "final audio ready"
+          );
           socket.close();
         }
       };
@@ -213,17 +299,30 @@ export function useTTSStream() {
     }
   }
 
-  function send(text: string) {
+  async function send(text: string) {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
       setError("Stream is not open.");
+      return;
+    }
+    const deltas = splitRealtimeText(text);
+    if (!deltas.length) {
+      setError("Nothing to send.");
       return;
     }
     setError(null);
     setLastSentChars(text.length);
     setPhase("generating");
     void ensureAudioContext();
-    socketRef.current.send(JSON.stringify({ type: "text_chunk", text }));
-    appendEvent(`text chunk sent · ${text.length} chars`);
+    for (const [index, delta] of deltas.entries()) {
+      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+        break;
+      }
+      socketRef.current.send(JSON.stringify({ type: "text_chunk", text: delta }));
+      appendEvent(`text delta ${index + 1}/${deltas.length} · ${delta.length} chars`);
+      if (index < deltas.length - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 35));
+      }
+    }
   }
 
   function stop() {
@@ -238,5 +337,20 @@ export function useTTSStream() {
     setPhase("idle");
   }
 
-  return { connected, connectionLabel, sessionId, wsUrl, modelUsed, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop };
+  return {
+    connected,
+    connectionLabel,
+    sessionId,
+    wsUrl,
+    modelUsed,
+    runtimeTruth,
+    chunkCount,
+    lastSentChars,
+    finalUrl,
+    events,
+    error,
+    connect,
+    send,
+    stop
+  };
 }

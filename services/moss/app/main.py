@@ -4,6 +4,7 @@ import asyncio
 import base64
 import importlib.util
 import io
+import logging
 import os
 import time
 import wave
@@ -28,6 +29,7 @@ from mossttsrealtime.streaming_mossttsrealtime import (
 
 
 ASSISTANT_PREFIX = "<|im_end|>\n<|im_start|>assistant\n"
+logger = logging.getLogger("moss_realtime")
 
 
 class StreamStartRequest(BaseModel):
@@ -74,6 +76,9 @@ class SessionState:
     decoder: AudioStreamDecoder
     sample_rate: int
     output_format: str
+    requested_voice: str
+    context_mode: str
+    conditioning_source: str
     started_at: float = field(default_factory=time.perf_counter)
     first_chunk_at: float | None = None
     sequence: int = 0
@@ -250,8 +255,8 @@ def _build_runtime() -> RuntimeAssets:
         repetition_penalty=_env_float("MOSS_REALTIME_REPETITION_PENALTY", 1.1),
         repetition_window=_env_int("MOSS_REALTIME_REPETITION_WINDOW", 50),
         prefill_text_len=_env_int("MOSS_REALTIME_PREFILL_TEXT_LEN", min(getattr(processor, "delay_tokens_len", 12), 6)),
-        decode_chunk_frames=_env_int("MOSS_REALTIME_DECODE_CHUNK_FRAMES", 3),
-        decode_overlap_frames=_env_int("MOSS_REALTIME_DECODE_OVERLAP_FRAMES", 0),
+        decode_chunk_frames=_env_int("MOSS_REALTIME_DECODE_CHUNK_FRAMES", 40),
+        decode_overlap_frames=_env_int("MOSS_REALTIME_DECODE_OVERLAP_FRAMES", 4),
         enable_compile=_env_bool("MOSS_REALTIME_ENABLE_COMPILE", False),
         tokenizer=tokenizer,
         processor=processor,
@@ -335,6 +340,23 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         decoder=decoder,
         sample_rate=payload.sample_rate,
         output_format=payload.format,
+        requested_voice=payload.voice,
+        context_mode=payload.context_mode,
+        conditioning_source=prompt_audio_path if (prompt_audio_path := os.getenv("MOSS_PROMPT_AUDIO_PATH")) else "moss_default_unconditioned",
+    )
+    logger.info(
+        "moss_stream_started",
+        extra={
+            "session_id": payload.session_id,
+            "requested_voice": payload.voice,
+            "context_mode": payload.context_mode,
+            "conditioning_source_used": app.state.sessions[payload.session_id].conditioning_source,
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+            "final_artifact_source_route": "moss_realtime.final_decode",
+            "kv_cache_reuse": "session_local",
+            "decode_chunk_frames": runtime.decode_chunk_frames,
+            "decode_overlap_frames": runtime.decode_overlap_frames,
+        },
     )
     return {"session_id": payload.session_id, "model": "moss_realtime", "expires_in_seconds": 3600}
 
@@ -374,6 +396,17 @@ async def push_text(session_id: str, payload: TextChunkRequest) -> dict[str, Any
                         "metadata": {},
                     }
                 )
+    logger.info(
+        "moss_stream_text_push",
+        extra={
+            "session_id": session_id,
+            "text_chars": len(payload.text),
+            "requested_voice": state.requested_voice,
+            "conditioning_source_used": state.conditioning_source,
+            "chunk_events_emitted": len(events),
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+        },
+    )
     return {"events": events}
 
 
@@ -406,6 +439,20 @@ async def end_stream(session_id: str) -> dict[str, Any]:
     first_chunk_ms = 0
     if state.first_chunk_at is not None:
         first_chunk_ms = int((state.first_chunk_at - state.started_at) * 1000)
+    logger.info(
+        "moss_stream_finished",
+        extra={
+            "session_id": session_id,
+            "requested_voice": state.requested_voice,
+            "conditioning_source_used": state.conditioning_source,
+            "chunk_count": state.sequence,
+            "first_chunk_ms": first_chunk_ms,
+            "duration_ms": duration_ms,
+            "live_chunk_source_route": "moss_realtime.decoder_stream",
+            "final_artifact_source_route": "moss_realtime.final_decode",
+            "kv_cache_reuse": "session_local",
+        },
+    )
     return {
         "session_id": session_id,
         "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),

@@ -46,6 +46,10 @@ class TTSStreamStartRequest(BaseModel):
 class TTSStreamStartResponse(BaseModel):
     session_id: str
     ws_url: str
+    model_requested: str | None = None
+    model_used: str | None = None
+    fallback_used: bool = False
+    runtime: dict[str, Any] = Field(default_factory=dict)
 
 
 class TTSEvent(BaseModel):

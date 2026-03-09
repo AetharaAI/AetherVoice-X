@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     moss_model_id: str = Field(default="OpenMOSS-Team/MOSS-TTS-Realtime", validation_alias=AliasChoices("MOSS_MODEL_ID"))
     moss_realtime_base_url: str | None = Field(default=None, validation_alias=AliasChoices("MOSS_REALTIME_BASE_URL", "MOSS_BASE_URL"))
     moss_realtime_timeout_seconds: float = Field(default=120.0, validation_alias=AliasChoices("MOSS_REALTIME_TIMEOUT_SECONDS"))
+    moss_prompt_audio_path: str | None = Field(default=None, validation_alias=AliasChoices("MOSS_PROMPT_AUDIO_PATH"))
     openmoss_model_root: str = Field(default="/mnt/aetherpro/models/audio/OpenMOSS-Team", validation_alias=AliasChoices("OPENMOSS_MODEL_ROOT"))
     studio_openai_base_url: str | None = Field(default="https://api.openai.com/v1", validation_alias=AliasChoices("STUDIO_OPENAI_BASE_URL"))
     studio_openai_api_key: str | None = Field(default=None, validation_alias=AliasChoices("STUDIO_OPENAI_API_KEY", "OPENAI_API_KEY"))

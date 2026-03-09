@@ -138,6 +138,26 @@ class FakeRegistry:
 
 class FakeSettings:
     s3_bucket_tts = "voice-tts-output"
+    moss_prompt_audio_path = None
+
+
+class FakeStudioService:
+    def resolve_stream_runtime_truth(self, tenant_id: str, *, requested_route: str, runtime_path_used: str, voice_id: str, metadata: dict, fallback_route_used: str | None) -> dict:
+        return {
+            "requested_route": requested_route,
+            "runtime_path_used": runtime_path_used,
+            "live_chunk_source_route": f"{runtime_path_used}.live",
+            "final_artifact_source_route": f"{runtime_path_used}.final",
+            "selected_voice_id": voice_id,
+            "selected_voice_asset": voice_id,
+            "requested_preset": voice_id,
+            "resolved_conditioning_asset": None,
+            "actual_runtime_conditioning_source": "test_default",
+            "conditioning_active": False,
+            "fallback_route_used": fallback_route_used,
+            "fallback_voice_path": "test_default",
+            "notes": [],
+        }
 
 
 def _request(model: str = "moss_realtime") -> TTSStreamStartRequest:
@@ -162,6 +182,7 @@ def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
         telemetry=FakeTelemetry(),
         storage=FakeStorage(),
         settings=FakeSettings(),
+        studio_service=FakeStudioService(),
     )
 
     start = asyncio.run(service.start(_request()))
@@ -169,9 +190,12 @@ def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
     result, audio_bytes = asyncio.run(service.finish("sess_1"))
 
     assert start["model"] == "moss_realtime"
+    assert start["runtime"]["runtime_path_used"] == "moss_realtime"
     assert events and events[0]["type"] == "audio_chunk"
+    assert events[0]["metadata"]["runtime"]["live_chunk_source_route"] == "moss_realtime.live"
     assert result.model_used == "moss_realtime"
     assert result.audio_url.startswith("s3://voice-tts-output/tts/tenant_1/sess_1/")
+    assert result.artifacts["runtime"]["final_artifact_source_route"] == "moss_realtime.final"
     assert audio_bytes.startswith(b"RIFF")
 
 
@@ -185,6 +209,7 @@ def test_streaming_service_falls_back_to_microbatch_when_streaming_adapter_is_un
         telemetry=FakeTelemetry(),
         storage=FakeStorage(),
         settings=FakeSettings(),
+        studio_service=FakeStudioService(),
     )
 
     start = asyncio.run(service.start(_request(model="moss_realtime")))
@@ -192,7 +217,9 @@ def test_streaming_service_falls_back_to_microbatch_when_streaming_adapter_is_un
     result, audio_bytes = asyncio.run(service.finish("sess_1"))
 
     assert start["model"] == "chatterbox"
+    assert start["runtime"]["runtime_path_used"] == "chatterbox"
     assert events and events[0]["type"] == "audio_chunk"
     assert synthesis_service.calls == ["fallback chunk", "fallback chunk"]
     assert result.model_used == "chatterbox"
+    assert result.artifacts["fallback_route_used"] == "chatterbox"
     assert audio_bytes.startswith(b"RIFF")

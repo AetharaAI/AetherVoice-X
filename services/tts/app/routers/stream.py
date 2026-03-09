@@ -47,7 +47,13 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                         "session_id": session_id,
                         "audio_b64": audio_to_b64(audio_bytes),
                         "format": result.artifacts.get("format", "wav"),
-                        "metadata": {"audio_url": result.audio_url},
+                        "metadata": {
+                            "audio_url": result.audio_url,
+                            "runtime": result.artifacts.get("runtime"),
+                            "live_chunk_source_route": result.artifacts.get("live_chunk_source_route"),
+                            "final_artifact_source_route": result.artifacts.get("final_artifact_source_route"),
+                            "fallback_route_used": result.artifacts.get("fallback_route_used"),
+                        },
                     }
                 )
                 break

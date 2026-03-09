@@ -56,7 +56,10 @@ class RouteDescriptor(BaseModel):
     name: RouteTarget
     label: str
     mode: Literal["stream", "batch", "dialogue", "voice-design"]
-    status: Literal["ready", "configured", "staged", "missing"]
+    status: Literal["ready", "staged", "disabled", "missing"]
+    present_on_disk: bool = False
+    runtime_wired: bool = False
+    invokable: bool = False
     model_path: str | None = None
     notes: str | None = None
     fallback_target: str | None = None

@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.studio_service = studio_service
     app.state.synthesis_service = synthesis_service
-    app.state.streaming_service = StreamingService(registry, synthesis_service, redis, TelemetryService(), storage, settings)
+    app.state.streaming_service = StreamingService(registry, synthesis_service, redis, TelemetryService(), storage, settings, studio_service)
     logger.info("tts_started")
     try:
         yield
