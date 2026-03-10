@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+from pathlib import Path
 from urllib.parse import urljoin
 
 from .base import BaseTTSAdapter
@@ -21,9 +22,21 @@ class ChatterboxAdapter(BaseTTSAdapter):
     async def close(self) -> None:
         await self.client.aclose()
 
-    def _resolve_voice_file(self, voice: str) -> str:
+    def _resolve_voice_file(self, voice: str, *, extra: dict | None = None) -> str:
+        resolved_voice = extra.get("resolved_voice") if isinstance(extra, dict) else None
+        if isinstance(resolved_voice, dict):
+            runtime_target = str(resolved_voice.get("runtime_target") or "").strip()
+            source_model = str(resolved_voice.get("source_model") or "").strip()
+            reference_audio_path = str(resolved_voice.get("reference_audio_path") or "").strip()
+            if runtime_target == "chatterbox" or source_model == "chatterbox":
+                if reference_audio_path:
+                    reference_name = Path(reference_audio_path).name
+                    if reference_name:
+                        return reference_name
+            elif runtime_target:
+                return self.default_voice
         candidate = (voice or "").strip()
-        if not candidate or candidate == "default":
+        if not candidate or candidate in {"default", "chatterbox_default"}:
             return self.default_voice
         if "." in candidate:
             return candidate
@@ -34,7 +47,7 @@ class ChatterboxAdapter(BaseTTSAdapter):
 
     async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
         extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
-        voice_file = self._resolve_voice_file(request.voice)
+        voice_file = self._resolve_voice_file(request.voice, extra=extra)
         voice_name = self._resolve_voice_name(voice_file)
         chunk_size = int(extra.get("chunk_size") or 120)
         split_text = bool(extra.get("split_text", True))

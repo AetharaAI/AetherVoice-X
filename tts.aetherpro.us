@@ -1,0 +1,213 @@
+# ============================================================
+# tts.aetherpro.us — Nginx Production Config
+# Gateway: 127.0.0.1:8010 (Aether Voice Gateway)
+# Chatterbox Legacy UI: 127.0.0.1:8004
+#
+# Route map (from openapi.json):
+#   /v1/health                              → gateway (public, no rate limit)
+#   /v1/models                              → gateway
+#   /v1/asr/*                               → gateway (ASR routes)
+#   /v1/tts/synthesize                      → gateway (buffered audio response)
+#   /v1/tts/stream/start                    → gateway (returns ws_url for client)
+#   /v1/tts/studio/*                        → gateway (studio management)
+#   /v1/sessions/*                          → gateway (session management)
+#   /v1/metrics                             → gateway
+#   /ws/*                                   → gateway (WebSocket upgrade)
+#   /docs /redoc /openapi.json              → gateway (FastAPI docs)
+#   /                                       → Chatterbox legacy UI (catch-all)
+#
+# ⚠️  To remove Chatterbox and serve a new UI, replace the
+#     final location / block with your new frontend port.
+# ============================================================
+
+upstream voice_gateway {
+    server 127.0.0.1:8010;
+    keepalive 64;
+}
+
+upstream chatterbox_ui {
+    server 127.0.0.1:8004;
+    keepalive 16;
+}
+
+limit_req_zone $binary_remote_addr zone=tts_api:10m    rate=10r/s;
+limit_req_zone $binary_remote_addr zone=tts_synth:10m  rate=5r/s;
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# ── HTTP → HTTPS redirect ────────────────────────────────────
+server {
+    listen 80;
+    server_name tts.aetherpro.us;
+    return 301 https://$host$request_uri;
+}
+
+# ── HTTPS ────────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    server_name tts.aetherpro.us;
+
+    ssl_certificate     /etc/letsencrypt/live/tts.aetherpro.us/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tts.aetherpro.us/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 100M;
+
+    # ── Shared proxy headers macro (repeated for clarity) ────
+    # nginx doesn't support macros natively; headers are inlined per block.
+
+    # ────────────────────────────────────────────────────────
+    # HEALTH  —  /v1/health
+    # Public, no rate limit, short timeout
+    # Fixes the 404 observed in logs for tts.aetherpro.us/health
+    # ────────────────────────────────────────────────────────
+    location = /v1/health {
+        proxy_pass         http://voice_gateway;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout    10;
+        proxy_connect_timeout  5;
+    }
+
+    # Alias: /health → /v1/health  (fixes the exact 404 from logs)
+    location = /health {
+        proxy_pass         http://voice_gateway/v1/health;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout    10;
+        proxy_connect_timeout  5;
+    }
+
+    # ────────────────────────────────────────────────────────
+    # WEBSOCKET  —  /ws/*
+    # Real-time TTS streaming sessions
+    # Client calls /v1/tts/stream/start → gets back ws_url → connects here
+    # ────────────────────────────────────────────────────────
+    location /ws/ {
+        proxy_pass         http://voice_gateway;
+        proxy_http_version 1.1;
+
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        $connection_upgrade;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Authorization     $http_authorization;
+
+        # WebSocket sessions must stay alive
+        proxy_read_timeout    3600;
+        proxy_connect_timeout   30;
+        proxy_send_timeout    3600;
+
+        # No buffering — breaks WebSocket
+        proxy_buffering off;
+    }
+
+    # ────────────────────────────────────────────────────────
+    # TTS SYNTHESIS  —  /v1/tts/synthesize
+    # Returns audio file — disable buffering for streaming
+    # Lower rate limit: synthesis is GPU-heavy
+    # ────────────────────────────────────────────────────────
+    location = /v1/tts/synthesize {
+        limit_req zone=tts_synth burst=10 nodelay;
+
+        proxy_pass         http://voice_gateway;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Authorization     $http_authorization;
+
+        proxy_read_timeout    300;
+        proxy_connect_timeout  30;
+        proxy_buffering       off;   # stream audio back immediately
+        client_max_body_size  10M;
+    }
+
+    # ────────────────────────────────────────────────────────
+    # TTS STREAM START  —  /v1/tts/stream/start
+    # Returns JSON with ws_url — short lived HTTP call
+    # ────────────────────────────────────────────────────────
+    location = /v1/tts/stream/start {
+        limit_req zone=tts_api burst=20 nodelay;
+
+        proxy_pass         http://voice_gateway;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Authorization     $http_authorization;
+
+        proxy_read_timeout    30;
+        proxy_connect_timeout 10;
+    }
+
+    # ────────────────────────────────────────────────────────
+    # ALL OTHER /v1/* ROUTES
+    # Covers: /v1/models, /v1/asr/*, /v1/tts/studio/*,
+    #         /v1/sessions/*, /v1/metrics
+    # ────────────────────────────────────────────────────────
+    location /v1/ {
+        limit_req zone=tts_api burst=20 nodelay;
+
+        proxy_pass         http://voice_gateway;
+        proxy_http_version 1.1;
+
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        $connection_upgrade;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Authorization     $http_authorization;
+        proxy_set_header   Cookie            $http_cookie;
+
+        proxy_read_timeout    300;
+        proxy_connect_timeout  30;
+        client_max_body_size  100M;
+    }
+
+    # ────────────────────────────────────────────────────────
+    # FASTAPI DOCS
+    # /docs, /redoc, /openapi.json → gateway
+    # Must be explicit so the SPA catch-all below doesn't grab them
+    # ────────────────────────────────────────────────────────
+    location = /docs         { proxy_pass http://voice_gateway; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location  /docs/         { proxy_pass http://voice_gateway; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location = /redoc        { proxy_pass http://voice_gateway; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location  /redoc/        { proxy_pass http://voice_gateway; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location = /openapi.json { proxy_pass http://voice_gateway; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+
+    # ────────────────────────────────────────────────────────
+    # CHATTERBOX LEGACY UI  —  catch-all
+    # Everything not matched above falls through to Chatterbox.
+    # When you're ready to swap in your own frontend:
+    #   1. Change proxy_pass to your new UI port
+    #   2. Remove or comment out the chatterbox_ui upstream
+    # ────────────────────────────────────────────────────────
+    location / {
+        proxy_pass         http://chatterbox_ui;
+        proxy_http_version 1.1;
+
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection $connection_upgrade;
+        proxy_set_header   Host       $host;
+        proxy_set_header   X-Real-IP  $remote_addr;
+
+        proxy_read_timeout    300;
+        proxy_send_timeout    300;
+    }
+}
