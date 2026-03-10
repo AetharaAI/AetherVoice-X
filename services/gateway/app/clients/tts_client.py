@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 
 
@@ -74,10 +76,31 @@ class TTSClient:
         response.raise_for_status()
         return response.json()
 
+    def _upstream_error_detail(self, response: httpx.Response, operation: str) -> str:
+        detail: str | None = None
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                raw_detail = payload.get("detail")
+                if isinstance(raw_detail, str) and raw_detail.strip():
+                    detail = raw_detail.strip()
+                elif raw_detail is not None:
+                    detail = json.dumps(raw_detail)
+        except Exception:
+            detail = None
+        if not detail:
+            detail = response.text.strip() or response.reason_phrase or "upstream request failed"
+        return f"tts {operation} failed: {detail}"
+
     async def warm_studio_route(self, route_name: str, *, tenant_id: str) -> dict:
-        response = await self.client.post(
-            f"/internal/studio/routes/{route_name}/warmup",
-            headers={"X-Tenant-Id": tenant_id},
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                f"/internal/studio/routes/{route_name}/warmup",
+                headers={"X-Tenant-Id": tenant_id},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(self._upstream_error_detail(exc.response, "studio warmup")) from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"tts studio warmup upstream request failed: {exc}") from exc
         return response.json()

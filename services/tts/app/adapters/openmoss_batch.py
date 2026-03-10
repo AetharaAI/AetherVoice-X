@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 
 import httpx
 
@@ -34,14 +35,35 @@ class OpenMOSSBatchAdapter(BaseTTSAdapter):
         self.ready = self._probe_health()
         return self.ready
 
+    def _upstream_error_detail(self, response: httpx.Response, operation: str) -> str:
+        detail: str | None = None
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                raw_detail = payload.get("detail")
+                if isinstance(raw_detail, str) and raw_detail.strip():
+                    detail = raw_detail.strip()
+                elif raw_detail is not None:
+                    detail = json.dumps(raw_detail)
+        except Exception:
+            detail = None
+        if not detail:
+            detail = response.text.strip() or response.reason_phrase or "upstream request failed"
+        return f"{self.name} {operation} failed: {detail}"
+
     async def warmup(self, metadata: dict | None = None) -> dict:
         if not self.base_url or self.client is None:
             raise RuntimeError(f"{self.name} upstream is not configured")
-        response = await self.client.post(
-            "/v1/warmup",
-            json={"metadata": metadata or {}},
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                "/v1/warmup",
+                json={"metadata": metadata or {}},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(self._upstream_error_detail(exc.response, "warmup")) from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"{self.name} warmup upstream request failed: {exc}") from exc
         self.ready = True
         return response.json()
 
@@ -52,18 +74,23 @@ class OpenMOSSBatchAdapter(BaseTTSAdapter):
     async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
         if not self.base_url or self.client is None:
             raise RuntimeError(f"{self.name} upstream is not configured")
-        response = await self.client.post(
-            "/v1/synthesize",
-            json={
-                "text": request.text,
-                "format": request.format,
-                "sample_rate": request.sample_rate,
-                "voice": request.voice,
-                "style": request.style.model_dump(),
-                "metadata": request.metadata,
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                "/v1/synthesize",
+                json={
+                    "text": request.text,
+                    "format": request.format,
+                    "sample_rate": request.sample_rate,
+                    "voice": request.voice,
+                    "style": request.style.model_dump(),
+                    "metadata": request.metadata,
+                },
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(self._upstream_error_detail(exc.response, "synthesis")) from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"{self.name} synthesis upstream request failed: {exc}") from exc
         payload = response.json()
         audio_b64 = payload.get("audio_b64")
         if not isinstance(audio_b64, str) or not audio_b64:

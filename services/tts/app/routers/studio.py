@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, Header, Request, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 
 from ..schemas.studio import LLMRoutingConfig, VoiceCreateRequest
 
@@ -87,7 +87,12 @@ async def warm_route(
     x_tenant_id: str = Header(alias="X-Tenant-Id"),
 ) -> dict:
     adapter = request.app.state.registry.get(route_name)
-    result = await adapter.warmup({"tenant_id": x_tenant_id, "source": "tts_studio"})
+    try:
+        result = await adapter.warmup({"tenant_id": x_tenant_id, "source": "tts_studio"})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     overview = request.app.state.studio_service.overview(x_tenant_id).model_dump()
     return {
         "route": route_name,

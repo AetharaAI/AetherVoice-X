@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from ..clients.tts_client import TTSClient
 from ..dependencies import get_auth_context, get_tts_client
@@ -113,4 +113,9 @@ async def warm_route(
     tts_client: TTSClient = Depends(get_tts_client),
 ) -> dict:
     ensure_scopes(auth, {"voice:tts"})
-    return await tts_client.warm_studio_route(route_name, tenant_id=auth.tenant_id)
+    try:
+        return await tts_client.warm_studio_route(route_name, tenant_id=auth.tenant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
