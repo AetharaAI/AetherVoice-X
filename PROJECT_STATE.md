@@ -1,5 +1,17 @@
 # Project State
 
+## GPU contract
+
+- Chatterbox TTS is external to this stack and is pinned to host GPU `3`.
+- Chatterbox can sit mostly cold between jobs, but a long generation can consume that entire GPU by itself.
+- Nothing in this repo should default to host GPU `3` while Chatterbox remains in service.
+- Voxtral Realtime is pinned to host GPU `2`.
+- OpenMOSS realtime is pinned to host GPU `0`.
+- The OpenMOSS family sidecars in this repo should stay aligned to host GPU `0` unless explicitly re-planned.
+- ASR stays off host GPU `3`; current pinned expectation is host GPU `1` for the in-stack ASR lane.
+- Inside a container, `cuda:0` is still correct when only one host GPU is exposed through `NVIDIA_VISIBLE_DEVICES`.
+- Long-term target: once OpenMOSS fully replaces Chatterbox, this app owns the full L40S-360 envelope and GPU `3` becomes available to the unified stack too.
+
 ## Current status
 
 - Batch TTS: working end-to-end through the unified gateway.

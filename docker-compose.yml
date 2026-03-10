@@ -152,7 +152,7 @@ services:
       MOSS_REALTIME_REPETITION_PENALTY: ${MOSS_REALTIME_REPETITION_PENALTY:-1.1}
       MOSS_REALTIME_REPETITION_WINDOW: ${MOSS_REALTIME_REPETITION_WINDOW:-50}
       MOSS_RUNTIME_PORT: ${MOSS_RUNTIME_PORT:-8021}
-      NVIDIA_VISIBLE_DEVICES: ${MOSS_GPU_IDS:-3}
+      NVIDIA_VISIBLE_DEVICES: ${MOSS_GPU_IDS:-0}
       NVIDIA_DRIVER_CAPABILITIES: ${MOSS_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${MOSS_HOST_PORT:-8013}:${MOSS_RUNTIME_PORT:-8021}"
@@ -167,7 +167,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["${MOSS_GPU_IDS:-3}"]
+              device_ids: ["${MOSS_GPU_IDS:-0}"]
               capabilities: [gpu]
 
   moss-tts:
