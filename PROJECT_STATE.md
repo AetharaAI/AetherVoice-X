@@ -2,15 +2,16 @@
 
 ## GPU contract
 
-- Chatterbox TTS is external to this stack and is pinned to host GPU `3`.
-- Chatterbox can sit mostly cold between jobs, but a long generation can consume that entire GPU by itself.
-- Nothing in this repo should default to host GPU `3` while Chatterbox remains in service.
+- Chatterbox TTS is external to this stack and uses host GPU `3` opportunistically during generation.
+- Host GPU `3` is currently treated as the shared studio/design lane for `moss_voice_generator` until Chatterbox is retired.
+- Operational rule for now: do not rely on Chatterbox and `moss_voice_generator` concurrently.
 - Voxtral Realtime is pinned to host GPU `2`.
 - OpenMOSS realtime is pinned to host GPU `0`.
-- The OpenMOSS family sidecars in this repo should stay aligned to host GPU `0` unless explicitly re-planned.
+- `moss_tts` and `moss_ttsd` remain aligned to host GPU `0` unless explicitly re-planned.
 - ASR stays off host GPU `3`; current pinned expectation is host GPU `1` for the in-stack ASR lane.
 - Inside a container, `cuda:0` is still correct when only one host GPU is exposed through `NVIDIA_VISIBLE_DEVICES`.
-- Long-term target: once OpenMOSS fully replaces Chatterbox, this app owns the full L40S-360 envelope and GPU `3` becomes available to the unified stack too.
+- Current working studio exception: `moss_voice_generator` is stable on host GPU `3` and now boots, warms, and renders successfully through the UI.
+- Long-term target: once OpenMOSS fully replaces Chatterbox, this app owns the full L40S-360 envelope and GPU `3` becomes a first-class unified stack lane.
 
 ## Current status
 
@@ -25,6 +26,7 @@
 - Live TTS operator console: chunk playback, final WAV playback, explicit download controls, and stream-state feedback are now visible in the browser.
 - TTS Live contract fix: operator-side structured controls no longer need to be prepended into spoken text, and the existing live playback contract remains intact.
 - TTS Studio phase 1 scaffolding: additive studio backend and new top-level UI surface are now present without replacing the existing TTS Live lane.
+- TTS Studio voice design preview: `moss_voice_generator` is now runtime-backed, warms successfully, and renders end-to-end through the browser.
 
 ## Stable lanes
 
@@ -62,7 +64,8 @@
   - backend route catalog now advertises `moss_realtime`, `moss_tts`, `moss_ttsd`, `moss_voice_generator`, and `chatterbox`
   - provider-backed LLM routing config is now scaffolded for `OpenAI`, `OpenRouter`, `LiteLLM`, with `Anthropic` stubbed
   - provider model dropdowns are fetched live through backend `/models` calls with env-backed auth
-  - current limitation: only `moss_realtime` and `chatterbox` are runtime-backed in the service layer today
+  - `moss_voice_generator` is now runtime-backed and verified through curl plus the browser UI
+  - current limitation: `moss_tts` and `moss_ttsd` still need the same runtime verification pass before they can be treated as production-ready studio routes
 
 ## Operator notes
 
@@ -89,20 +92,21 @@
 
 ## Immediate next steps
 
-1. Finish runtime adapters for `moss_tts`, `moss_ttsd`, and `moss_voice_generator` behind the new TTS Studio route catalog.
+1. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the new TTS Studio route catalog.
 2. Add per-voice asset promotion flows so imported and generated voices can be bound cleanly into OpenMOSS runtime requests.
-3. Rework `moss_realtime` turn construction so operator metadata remains structured state and does not leak into spoken output.
-4. Validate provider-backed LLM model discovery against real `OpenAI`, `OpenRouter`, and internal `LiteLLM` endpoints.
-5. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
-6. Record timing notes for:
+3. Test realtime conditioning against the pinned default prompt WAV and work the first-turn token shaping problem for telephony voice agents.
+4. Rework `moss_realtime` turn construction so operator metadata remains structured state and does not leak into spoken output.
+5. Validate provider-backed LLM model discovery against real `OpenAI`, `OpenRouter`, and internal `LiteLLM` endpoints.
+6. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
+7. Record timing notes for:
    - first partial latency
    - final latency
    - partial event cadence
    - transcript stability under real speech
-7. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
-8. Evaluate `MOSS-TTSD-v1.0` for studio dialogue generation and keep `moss_realtime` focused on low-latency agent turns only if warm-path latency stays acceptable.
-9. If telephony latency remains too high after shaping fixes, switch the production realtime lane to a smaller model such as Kokoro and keep OpenMOSS in experimental status.
-10. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+8. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
+9. Evaluate `MOSS-TTSD-v1.0` for studio dialogue generation and keep `moss_realtime` focused on low-latency agent turns only if warm-path latency stays acceptable.
+10. If telephony latency remains too high after shaping fixes, switch the production realtime lane to a smaller model such as Kokoro and keep OpenMOSS in experimental status.
+11. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Snapshot references
 

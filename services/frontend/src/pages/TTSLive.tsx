@@ -116,6 +116,14 @@ export function TTSLive() {
   const [speakingStyle, setSpeakingStyle] = useState("service");
   const [latencyMode, setLatencyMode] = useState("low_latency");
   const [sampleRate, setSampleRate] = useState(24000);
+  const [prefillTextLen, setPrefillTextLen] = useState(6);
+  const [decodeChunkFrames, setDecodeChunkFrames] = useState(3);
+  const [decodeOverlapFrames, setDecodeOverlapFrames] = useState(0);
+  const [temperature, setTemperature] = useState(0.8);
+  const [topP, setTopP] = useState(0.6);
+  const [topK, setTopK] = useState(30);
+  const [repetitionPenalty, setRepetitionPenalty] = useState(1.1);
+  const [repetitionWindow, setRepetitionWindow] = useState(50);
   const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
   const [rawDirectives, setRawDirectives] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
   const liveModels = models.filter((entry) => entry.kind === "tts" && entry.supports_streaming);
@@ -168,6 +176,19 @@ export function TTSLive() {
     }),
     [cadence, latencyMode, rawDirectives, selectedVoice?.voice_id, sessionProfile, speakingStyle, tone]
   );
+  const realtimeTuning = useMemo(
+    () => ({
+      prefill_text_len: prefillTextLen,
+      decode_chunk_frames: decodeChunkFrames,
+      decode_overlap_frames: decodeOverlapFrames,
+      temperature,
+      top_p: topP,
+      top_k: topK,
+      repetition_penalty: repetitionPenalty,
+      repetition_window: repetitionWindow
+    }),
+    [decodeChunkFrames, decodeOverlapFrames, prefillTextLen, repetitionPenalty, repetitionWindow, temperature, topK, topP]
+  );
 
   useEffect(() => {
     fetchModels()
@@ -206,7 +227,8 @@ export function TTSLive() {
                   source: "console",
                   extra: {
                     lane: "tts_live",
-                    realtime_profile: realtimeProfile
+                    realtime_profile: realtimeProfile,
+                    realtime_tuning: realtimeTuning
                   }
                 }
               })
@@ -331,6 +353,117 @@ export function TTSLive() {
             </select>
           </div>
         </div>
+        <details className="accordion">
+          <summary>Realtime tuning</summary>
+          <div className="accordion-body">
+            <div className="control-grid">
+              <div className="field-group">
+                <label htmlFor="tts-live-prefill">Prefill text len</label>
+                <input
+                  id="tts-live-prefill"
+                  type="number"
+                  min={1}
+                  max={64}
+                  value={prefillTextLen}
+                  onChange={(event) => setPrefillTextLen(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-chunk-frames">Decode chunk frames</label>
+                <input
+                  id="tts-live-chunk-frames"
+                  type="number"
+                  min={1}
+                  max={64}
+                  value={decodeChunkFrames}
+                  onChange={(event) => setDecodeChunkFrames(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-overlap-frames">Decode overlap frames</label>
+                <input
+                  id="tts-live-overlap-frames"
+                  type="number"
+                  min={0}
+                  max={16}
+                  value={decodeOverlapFrames}
+                  onChange={(event) => setDecodeOverlapFrames(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-temperature">Temperature</label>
+                <input
+                  id="tts-live-temperature"
+                  type="number"
+                  min={0.1}
+                  max={2}
+                  step={0.05}
+                  value={temperature}
+                  onChange={(event) => setTemperature(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-top-p">Top p</label>
+                <input
+                  id="tts-live-top-p"
+                  type="number"
+                  min={0.05}
+                  max={1}
+                  step={0.05}
+                  value={topP}
+                  onChange={(event) => setTopP(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-top-k">Top k</label>
+                <input
+                  id="tts-live-top-k"
+                  type="number"
+                  min={1}
+                  max={200}
+                  step={1}
+                  value={topK}
+                  onChange={(event) => setTopK(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-repetition-penalty">Repetition penalty</label>
+                <input
+                  id="tts-live-repetition-penalty"
+                  type="number"
+                  min={0.8}
+                  max={2}
+                  step={0.05}
+                  value={repetitionPenalty}
+                  onChange={(event) => setRepetitionPenalty(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+              <div className="field-group">
+                <label htmlFor="tts-live-repetition-window">Repetition window</label>
+                <input
+                  id="tts-live-repetition-window"
+                  type="number"
+                  min={1}
+                  max={512}
+                  step={1}
+                  value={repetitionWindow}
+                  onChange={(event) => setRepetitionWindow(Number(event.target.value))}
+                  disabled={connected}
+                />
+              </div>
+            </div>
+            <p className="field-hint">
+              These controls apply at stream start for the current session only. Use them for immediate live quality tests without changing backend env defaults.
+            </p>
+          </div>
+        </details>
         <div className="meta-grid">
           <div className="meta-card">
             <span className="label">Connection</span>

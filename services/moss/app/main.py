@@ -86,6 +86,67 @@ class SessionState:
     text_completed: bool = False
 
 
+def _metadata_extra(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    extra = metadata.get("extra")
+    return extra if isinstance(extra, dict) else {}
+
+
+def _metadata_int(source: dict[str, Any], key: str, default: int, *, minimum: int | None = None, maximum: int | None = None) -> int:
+    value = source.get(key)
+    if value in {None, ""}:
+        resolved = default
+    else:
+        resolved = int(value)
+    if minimum is not None:
+        resolved = max(minimum, resolved)
+    if maximum is not None:
+        resolved = min(maximum, resolved)
+    return resolved
+
+
+def _metadata_float(source: dict[str, Any], key: str, default: float, *, minimum: float | None = None, maximum: float | None = None) -> float:
+    value = source.get(key)
+    if value in {None, ""}:
+        resolved = default
+    else:
+        resolved = float(value)
+    if minimum is not None:
+        resolved = max(minimum, resolved)
+    if maximum is not None:
+        resolved = min(maximum, resolved)
+    return resolved
+
+
+def _realtime_tuning(metadata: dict[str, Any] | None, runtime: RuntimeAssets) -> dict[str, int | float]:
+    tuning = _metadata_extra(metadata).get("realtime_tuning")
+    tuning_dict = tuning if isinstance(tuning, dict) else {}
+    return {
+        "max_length": _metadata_int(tuning_dict, "max_length", runtime.max_length, minimum=256),
+        "prefill_text_len": _metadata_int(tuning_dict, "prefill_text_len", runtime.prefill_text_len, minimum=1),
+        "decode_chunk_frames": _metadata_int(tuning_dict, "decode_chunk_frames", runtime.decode_chunk_frames, minimum=1),
+        "decode_overlap_frames": _metadata_int(tuning_dict, "decode_overlap_frames", runtime.decode_overlap_frames, minimum=0),
+        "temperature": _metadata_float(tuning_dict, "temperature", runtime.temperature, minimum=0.1, maximum=2.0),
+        "top_p": _metadata_float(tuning_dict, "top_p", runtime.top_p, minimum=0.05, maximum=1.0),
+        "top_k": _metadata_int(tuning_dict, "top_k", runtime.top_k, minimum=1, maximum=200),
+        "repetition_penalty": _metadata_float(
+            tuning_dict,
+            "repetition_penalty",
+            runtime.repetition_penalty,
+            minimum=0.8,
+            maximum=2.0,
+        ),
+        "repetition_window": _metadata_int(
+            tuning_dict,
+            "repetition_window",
+            runtime.repetition_window,
+            minimum=1,
+            maximum=512,
+        ),
+    }
+
+
 def _env_float(name: str, default: float) -> float:
     value = os.getenv(name)
     return float(value) if value not in {None, ""} else default
@@ -392,7 +453,8 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
             status_code=400,
             detail=f"MOSS realtime sidecar is configured for {runtime.sample_rate} Hz audio.",
         )
-    inferencer = MossTTSRealtimeInference(runtime.model, runtime.tokenizer, max_length=runtime.max_length)
+    tuning = _realtime_tuning(payload.metadata, runtime)
+    inferencer = MossTTSRealtimeInference(runtime.model, runtime.tokenizer, max_length=int(tuning["max_length"]))
     inferencer.reset_generation_state(keep_cache=False)
     if hasattr(inferencer, "_should_compile_local_transformer"):
         inferencer._should_compile_local_transformer = runtime.enable_compile
@@ -404,13 +466,13 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         codec=runtime.codec,
         codec_sample_rate=runtime.sample_rate,
         codec_encode_kwargs={},
-        prefill_text_len=runtime.prefill_text_len,
-        temperature=runtime.temperature,
-        top_p=runtime.top_p,
-        top_k=runtime.top_k,
+        prefill_text_len=int(tuning["prefill_text_len"]),
+        temperature=float(tuning["temperature"]),
+        top_p=float(tuning["top_p"]),
+        top_k=int(tuning["top_k"]),
         do_sample=True,
-        repetition_penalty=runtime.repetition_penalty,
-        repetition_window=runtime.repetition_window,
+        repetition_penalty=float(tuning["repetition_penalty"]),
+        repetition_window=int(tuning["repetition_window"]),
     )
     if runtime.prompt_tokens is not None:
         session.set_voice_prompt_tokens(runtime.prompt_tokens)
@@ -421,8 +483,8 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
     )
     decoder = AudioStreamDecoder(
         runtime.codec,
-        chunk_frames=runtime.decode_chunk_frames,
-        overlap_frames=runtime.decode_overlap_frames,
+        chunk_frames=int(tuning["decode_chunk_frames"]),
+        overlap_frames=int(tuning["decode_overlap_frames"]),
         decode_kwargs={"chunk_duration": -1},
         device=runtime.device,
     )
@@ -445,8 +507,14 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
             "live_chunk_source_route": "moss_realtime.decoder_stream",
             "final_artifact_source_route": "moss_realtime.final_decode",
             "kv_cache_reuse": "session_local",
-            "decode_chunk_frames": runtime.decode_chunk_frames,
-            "decode_overlap_frames": runtime.decode_overlap_frames,
+            "decode_chunk_frames": tuning["decode_chunk_frames"],
+            "decode_overlap_frames": tuning["decode_overlap_frames"],
+            "prefill_text_len": tuning["prefill_text_len"],
+            "temperature": tuning["temperature"],
+            "top_p": tuning["top_p"],
+            "top_k": tuning["top_k"],
+            "repetition_penalty": tuning["repetition_penalty"],
+            "repetition_window": tuning["repetition_window"],
         },
     )
     return {"session_id": payload.session_id, "model": "moss_realtime", "expires_in_seconds": 3600}
