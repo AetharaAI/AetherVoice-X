@@ -8,14 +8,14 @@ echo "---- gateway health ----"
 curl -fsS http://127.0.0.1:8010/v1/health || true
 echo
 echo
-echo "---- realtime moss health from tts ----"
-docker compose exec tts curl -fsS http://moss:8021/health || true
+echo "---- realtime moss health ----"
+curl -fsS http://127.0.0.1:8013/health || true
 echo
 echo
-echo "---- voice generator health from tts ----"
-docker compose exec tts curl -fsS http://moss-voice-generator:8024/health || true
+echo "---- voice generator health ----"
+curl -fsS http://127.0.0.1:8016/health || true
 echo
 echo
-echo "---- voxtral-asr health from gateway ----"
-docker compose exec gateway curl -fsS http://asr:8090/internal/health || true
+echo "---- asr health ----"
+curl -fsS http://127.0.0.1:8090/internal/health || true
 echo
