@@ -28,6 +28,7 @@
 - TTS Live conditioning contract: selected voice reference audio is now forwarded into `moss_realtime` at stream start, with `MOSS_PROMPT_AUDIO_PATH` kept only as the fallback prompt path.
 - TTS Studio phase 1 scaffolding: additive studio backend and new top-level UI surface are now present without replacing the existing TTS Live lane.
 - TTS Studio voice design preview: `moss_voice_generator` is now runtime-backed, warms successfully, and renders end-to-end through the browser.
+- TTS Studio voice save path: when a Voice Design preview has been rendered, saving the design now persists the preview WAV into the registry record so `TTS Live` can switch realtime conditioning by preset instead of always falling back to the global prompt file.
 
 ## Stable lanes
 
@@ -84,6 +85,7 @@
 - The TTS Live page now treats session profile, tone, cadence, style, and latency profile as console-side structured state rather than spoken markup.
 - The TTS Live page now exposes stream-start tuning knobs for immediate realtime quality tests without changing env defaults.
 - Realtime voice truth has changed: selected voice reference audio should now materially override the global fallback prompt on stream start when that asset exists and can be serialized from the voice registry.
+- Voice Design truth has changed: text-only generated presets are still metadata-only, but a rendered preview saved into the library now becomes a real reusable reference asset for later realtime conditioning.
 - The new TTS Studio page now exposes:
   - Voice Library
   - Voice Clone

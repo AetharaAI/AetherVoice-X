@@ -123,6 +123,7 @@ export function TTSStudio() {
   const [cloneFile, setCloneFile] = useState<File | null>(null);
   const [cloneTags, setCloneTags] = useState("telephony, support");
   const [cloneNotes, setCloneNotes] = useState("Imported reference voice for future MOSS cloning runs.");
+  const [designVoiceId, setDesignVoiceId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("Warm Dispatcher");
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
   const [designPreviewText, setDesignPreviewText] = useState("AetherPro dispatch confirms the field team is active and en route.");
@@ -139,6 +140,7 @@ export function TTSStudio() {
   const [routingMode, setRoutingMode] = useState<"manual" | "asr_llm_tts" | "shadow">("manual");
   const [routingPrompt, setRoutingPrompt] = useState("Respond with short, spoken-ready voice agent deltas.");
   const [response, setResponse] = useState<TTSResponse | null>(null);
+  const [designPreviewResponse, setDesignPreviewResponse] = useState<TTSResponse | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +227,8 @@ export function TTSStudio() {
       : "Fallback preview. This lets you audition text/audio flow, but it is not true voice-generation conditioning.";
 
   function applyVoiceDesignState(voice: StudioVoice) {
+    setDesignVoiceId(voice.voice_id);
+    setDesignPreviewResponse(null);
     setDesignName(voice.display_name);
     setDesignPrompt(voice.generation_prompt?.trim() ? voice.generation_prompt : voice.notes ?? "");
     setDesignPreviewText(designPreviewTextForVoice(voice));
@@ -284,7 +288,7 @@ export function TTSStudio() {
       metadataExtra?: Record<string, unknown>;
       successMessage?: string;
     }
-  ) {
+  ): Promise<TTSResponse | null> {
     setBusyAction("generate");
     setError(null);
     setMessage(null);
@@ -304,8 +308,10 @@ export function TTSStudio() {
       });
       setResponse(payload);
       setMessage(options?.successMessage ?? `Generation completed via ${payload.model_used}.`);
+      return payload;
     } catch (err) {
       setError((err as Error).message);
+      return null;
     } finally {
       setBusyAction(null);
     }
@@ -344,18 +350,48 @@ export function TTSStudio() {
     setError(null);
     setMessage(null);
     try {
-      const voice = await createStudioVoice({
-        display_name: example?.title ?? designName,
-        type: "generated",
-        source_model: "moss_voice_generator",
-        runtime_target: designRoute,
-        generation_prompt: example?.generation_prompt ?? designPrompt,
-        tags: example?.tags ?? ["generated", "voice-design"],
-        default_params: { save_to_library: saveToLibrary },
-        notes: example?.description ?? "Voice design preset saved from TTS Studio."
-      });
+      const displayName = example?.title ?? designName;
+      const generationPrompt = example?.generation_prompt ?? designPrompt;
+      const tags = example?.tags ?? ["generated", "voice-design"];
+      const notes = example?.description ?? "Voice design preset saved from TTS Studio.";
+      let voice: StudioVoice;
+      if (designPreviewResponse?.audio_url) {
+        const previewResponse = await fetch(designPreviewResponse.audio_url);
+        if (!previewResponse.ok) {
+          throw new Error(`Unable to fetch preview audio for ${displayName}.`);
+        }
+        const previewBlob = await previewResponse.blob();
+        const form = new FormData();
+        form.set("file", new File([previewBlob], `${displayName}.wav`, { type: previewBlob.type || "audio/wav" }));
+        if (designVoiceId) {
+          form.set("voice_id", designVoiceId);
+        }
+        form.set("display_name", displayName);
+        form.set("source_model", "moss_voice_generator");
+        form.set("runtime_target", designRoute);
+        form.set("voice_type", "generated");
+        form.set("notes", notes);
+        form.set("tags", tags.join(","));
+        form.set("reference_text", designPreviewText);
+        form.set("generation_prompt", generationPrompt);
+        form.set("default_params", JSON.stringify({ save_to_library: saveToLibrary }));
+        voice = await importStudioVoice(form);
+      } else {
+        voice = await createStudioVoice({
+          voice_id: designVoiceId,
+          display_name: displayName,
+          type: "generated",
+          source_model: "moss_voice_generator",
+          runtime_target: designRoute,
+          generation_prompt: generationPrompt,
+          tags,
+          default_params: { save_to_library: saveToLibrary },
+          notes
+        });
+      }
       setMessage(`Voice preset saved as ${voice.display_name}.`);
       await refreshOverview();
+      setDesignVoiceId(voice.voice_id);
       setSelectedVoiceId(voice.voice_id);
       if (!example) {
         setActiveTab("Voice Library");
@@ -368,6 +404,8 @@ export function TTSStudio() {
   }
 
   function handleVoiceDesignPresetLoad(preset: ExamplePreset) {
+    setDesignVoiceId(null);
+    setDesignPreviewResponse(null);
     setDesignName(preset.title);
     setDesignPrompt(preset.generation_prompt);
     setDesignPreviewText(buildPresetPreviewText(preset));
@@ -418,7 +456,7 @@ export function TTSStudio() {
         return;
       }
     }
-    await runBatchGeneration(designPreviewText, designRoute, {
+    const payload = await runBatchGeneration(designPreviewText, designRoute, {
       metadataExtra: {
         generation_prompt: designPrompt,
         source_voice_design: true,
@@ -426,6 +464,9 @@ export function TTSStudio() {
       },
       successMessage: "Voice design preview rendered."
     });
+    if (payload) {
+      setDesignPreviewResponse(payload);
+    }
   }
 
   return (
@@ -608,11 +649,27 @@ export function TTSStudio() {
             <div className="control-grid">
               <div className="field-group">
                 <label htmlFor="voice-design-name">Preset name</label>
-                <input id="voice-design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} />
+                <input
+                  id="voice-design-name"
+                  value={designName}
+                  onChange={(event) => {
+                    setDesignPreviewResponse(null);
+                    setDesignVoiceId(null);
+                    setDesignName(event.target.value);
+                  }}
+                />
               </div>
               <div className="field-group">
                 <label htmlFor="voice-design-route">Runtime target</label>
-                <select id="voice-design-route" value={designRoute} onChange={(event) => setDesignRoute(event.target.value as StudioRouteDescriptor["name"])}>
+                <select
+                  id="voice-design-route"
+                  value={designRoute}
+                  onChange={(event) => {
+                    setDesignPreviewResponse(null);
+                    setDesignVoiceId(null);
+                    setDesignRoute(event.target.value as StudioRouteDescriptor["name"]);
+                  }}
+                >
                   {voiceDesignRoutes.map((route) => (
                       <option key={route.name} value={route.name} disabled={route.name === "moss_realtime"}>
                         {routeLabel(route)}
@@ -625,14 +682,30 @@ export function TTSStudio() {
             <details className="accordion" open>
               <summary>Voice description</summary>
               <div className="accordion-body">
-                <textarea value={designPrompt} onChange={(event) => setDesignPrompt(event.target.value)} rows={6} />
-                <p className="field-hint">Voice Generator is the preferred OpenMOSS route for studio-side voice creation. Save the preset into the registry, or render a preview when the sidecar is healthy.</p>
+                <textarea
+                  value={designPrompt}
+                  onChange={(event) => {
+                    setDesignPreviewResponse(null);
+                    setDesignVoiceId(null);
+                    setDesignPrompt(event.target.value);
+                  }}
+                  rows={6}
+                />
+                <p className="field-hint">Voice Generator is the preferred OpenMOSS route for studio-side voice creation. Render a preview first, then save it into the registry to bind the preview WAV as a reusable live conditioning asset.</p>
               </div>
             </details>
             <details className="accordion" open>
               <summary>Preview utterance</summary>
               <div className="accordion-body">
-                <textarea value={designPreviewText} onChange={(event) => setDesignPreviewText(event.target.value)} rows={4} />
+                <textarea
+                  value={designPreviewText}
+                  onChange={(event) => {
+                    setDesignPreviewResponse(null);
+                    setDesignVoiceId(null);
+                    setDesignPreviewText(event.target.value);
+                  }}
+                  rows={4}
+                />
                 <p className="field-hint">This sample line is spoken with the current generation prompt so you can audition Voice Generator outputs before saving them into the library. If the route is staged, the first click runs a warmup pass and then renders the preview.</p>
               </div>
             </details>

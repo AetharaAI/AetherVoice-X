@@ -18,6 +18,7 @@ from ..schemas.studio import (
     StudioOverview,
     VoiceCreateRequest,
     VoiceRecord,
+    VoiceType,
 )
 
 
@@ -520,15 +521,21 @@ class StudioService:
         return extra
 
     def create_voice(self, tenant_id: str, payload: VoiceCreateRequest) -> VoiceRecord:
-        registry = self._read_registry()
         voice = VoiceRecord(
-            voice_id=self._slugify(payload.display_name),
+            voice_id=payload.voice_id or self._slugify(payload.display_name),
             tenant_id=tenant_id,
-            **payload.model_dump(),
+            **payload.model_dump(exclude={"voice_id"}),
         )
-        registry.setdefault("voices", []).append(voice.model_dump())
-        self._write_registry(registry)
+        self._upsert_voice(voice)
         return voice
+
+    def _upsert_voice(self, voice: VoiceRecord) -> None:
+        registry = self._read_registry()
+        existing = [VoiceRecord.model_validate(entry) for entry in registry.get("voices", [])]
+        retained = [entry for entry in existing if entry.voice_id != voice.voice_id]
+        retained.append(voice)
+        registry["voices"] = [entry.model_dump() for entry in sorted(retained, key=lambda item: (item.type, item.display_name.lower()))]
+        self._write_registry(registry)
 
     def import_voice_asset(
         self,
@@ -541,23 +548,32 @@ class StudioService:
         runtime_target: str,
         notes: str | None,
         tags: list[str],
+        voice_id: str | None = None,
+        voice_type: VoiceType | None = None,
+        reference_text: str | None = None,
+        generation_prompt: str | None = None,
+        default_params: dict[str, Any] | None = None,
     ) -> VoiceRecord:
         suffix = Path(filename).suffix or ".wav"
-        voice_id = self._slugify(display_name)
-        asset_path = self.asset_dir / f"{voice_id}-{uuid4().hex[:10]}{suffix}"
+        resolved_voice_id = voice_id or self._slugify(display_name)
+        asset_path = self.asset_dir / f"{resolved_voice_id}-{uuid4().hex[:10]}{suffix}"
         asset_path.write_bytes(payload)
-        return self.create_voice(
-            tenant_id,
-            VoiceCreateRequest(
-                display_name=display_name,
-                type="imported" if source_model == "imported" else "cloned",
-                source_model=source_model,
-                runtime_target=runtime_target,
-                reference_audio_path=asset_path.as_posix(),
-                tags=tags,
-                notes=notes,
-            ),
+        voice = VoiceRecord(
+            voice_id=resolved_voice_id,
+            tenant_id=tenant_id,
+            display_name=display_name,
+            type=voice_type or ("imported" if source_model == "imported" else "cloned"),
+            source_model=source_model,
+            runtime_target=runtime_target,
+            reference_audio_path=asset_path.as_posix(),
+            reference_text=reference_text,
+            generation_prompt=generation_prompt,
+            tags=tags,
+            default_params=default_params or {},
+            notes=notes,
         )
+        self._upsert_voice(voice)
+        return voice
 
     def get_routing(self) -> LLMRoutingConfig:
         registry = self._read_registry()

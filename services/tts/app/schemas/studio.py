@@ -28,6 +28,7 @@ class VoiceRecord(BaseModel):
 
 
 class VoiceCreateRequest(BaseModel):
+    voice_id: str | None = None
     display_name: str
     type: VoiceType
     source_model: str

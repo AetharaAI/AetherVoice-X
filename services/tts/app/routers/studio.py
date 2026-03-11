@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 
-from ..schemas.studio import LLMRoutingConfig, VoiceCreateRequest
+from ..schemas.studio import LLMRoutingConfig, VoiceCreateRequest, VoiceType
 
 router = APIRouter(tags=["studio"])
 
@@ -43,9 +45,18 @@ async def import_voice(
     runtime_target: str = Form(...),
     notes: str | None = Form(default=None),
     tags: str = Form(default=""),
+    voice_id: str | None = Form(default=None),
+    voice_type: VoiceType | None = Form(default=None),
+    reference_text: str | None = Form(default=None),
+    generation_prompt: str | None = Form(default=None),
+    default_params: str | None = Form(default=None),
     x_tenant_id: str = Header(alias="X-Tenant-Id"),
 ) -> dict:
     payload = await file.read()
+    try:
+        parsed_default_params = json.loads(default_params) if default_params else {}
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="default_params must be valid JSON.") from exc
     voice = request.app.state.studio_service.import_voice_asset(
         tenant_id=x_tenant_id,
         filename=file.filename or "reference.wav",
@@ -55,6 +66,11 @@ async def import_voice(
         runtime_target=runtime_target,
         notes=notes,
         tags=[tag.strip() for tag in tags.split(",") if tag.strip()],
+        voice_id=voice_id,
+        voice_type=voice_type,
+        reference_text=reference_text,
+        generation_prompt=generation_prompt,
+        default_params=parsed_default_params if isinstance(parsed_default_params, dict) else {},
     )
     return voice.model_dump()
 
