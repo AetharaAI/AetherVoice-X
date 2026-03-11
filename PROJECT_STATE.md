@@ -30,6 +30,30 @@
 - TTS Studio voice design preview: `moss_voice_generator` is now runtime-backed, warms successfully, and renders end-to-end through the browser.
 - TTS Studio voice save path: when a Voice Design preview has been rendered, saving the design now persists the preview WAV into the registry record so `TTS Live` can switch realtime conditioning by preset instead of always falling back to the global prompt file.
 
+## Platform execution lanes
+
+### Lane 1: Realtime Agent Mode
+
+- Pipeline: `ASR -> LLM -> realtime TTS`
+- Primary product lane for telephony and live agent work.
+- Current state: materially improved and stable enough to freeze.
+- Realtime ASR is strong and should be treated as production-promising infrastructure.
+- Realtime MOSS TTS is now transport-stable and tunable, but speaker identity is still the main blocker.
+
+### Lane 2: Turn-Based Voice Mode
+
+- Pipeline: `ASR -> LLM -> batch / turn-based TTS`
+- This is the next implementation target.
+- Goal: establish a known-good end-to-end conversational baseline with stronger voice fidelity, easier debugging, and cleaner operator truth.
+- This lane should be completed before deeper realtime experimentation resumes.
+
+### Lane 3: Assisted / Staged Streaming Mode
+
+- Pipeline: `ASR -> LLM -> staged / chunked TTS playback`
+- Future enhancement lane.
+- Goal: create a perceived-realtime conversational experience without depending on strict realtime synthesis behavior.
+- Useful for dispatch, intake, scheduling, and service workflows where slight latency is acceptable.
+
 ## Stable lanes
 
 - `faster_whisper`
@@ -58,9 +82,24 @@
   - fallback to chatterbox micro-batching remains in place when the sidecar is unavailable
   - sidecar build, boot, chunk streaming, and final WAV assembly are now working
   - per-session reference audio now overrides the global prompt WAV when the selected voice has a usable registry asset
+  - selected voice registry assets now reach realtime and show up in `Runtime conditioning`
+  - longer prompt WAVs materially improve identity compared with very short references
+  - current stable decode baseline is:
+    - `prefill_text_len=24`
+    - `decode_chunk_frames=6`
+    - `decode_overlap_frames=0`
+  - current stable prosody baseline is:
+    - `temperature=0.45`
+    - `top_p=0.65`
+    - `top_k=30`
+    - `repetition_penalty=1.1`
+    - `repetition_window=50`
+  - current limitation: `MOSS-TTS-Realtime` still tends to collapse toward a house voice / model prior instead of strongly locking speaker identity across presets
+  - current limitation: synthetic preview WAVs are weaker conditioning sources than clean real human reference audio
+  - current lifecycle truth: one utterance per stream; after `/complete`, another `/text` on the same stream returns `409 Conflict`
   - first-turn latency remains poor enough to be a telephony concern, while second-turn latency is materially better
-  - current quality blocker is prompt/alignment behavior rather than transport bring-up
-  - current product blocker is voice catalog and conditioning readiness for a public-facing studio
+  - current quality blocker is voice identity / conditioning strength rather than transport bring-up
+  - current product blocker is not routing; it is whether realtime conditioning can become strong enough for production voice selection
 - `tts_studio`
   - new additive nav item is wired directly under `TTS File`
   - backend voice registry now persists reusable preset, imported, generated, and cloned voice metadata
@@ -86,6 +125,12 @@
 - The TTS Live page now exposes stream-start tuning knobs for immediate realtime quality tests without changing env defaults.
 - Realtime voice truth has changed: selected voice reference audio should now materially override the global fallback prompt on stream start when that asset exists and can be serialized from the voice registry.
 - Voice Design truth has changed: text-only generated presets are still metadata-only, but a rendered preview saved into the library now becomes a real reusable reference asset for later realtime conditioning.
+- Realtime lane should currently be operated as:
+  - start a stream
+  - send one utterance
+  - wait for completion
+  - start a fresh stream for the next utterance
+- Current default fallback prompt voice is controlled by `MOSS_PROMPT_AUDIO_PATH` in the active `.env`, not by UI metadata.
 - The new TTS Studio page now exposes:
   - Voice Library
   - Voice Clone
@@ -98,10 +143,10 @@
 
 ## Immediate next steps
 
-1. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the new TTS Studio route catalog.
-2. Validate that imported and generated registry assets produce materially different `moss_realtime` timbre now that per-session reference audio binding is in place.
-3. Test realtime conditioning against the pinned default prompt WAV fallback and work the first-turn token shaping problem for telephony voice agents.
-4. Rework `moss_realtime` turn construction so operator metadata remains structured state and does not leak into spoken output.
+1. Freeze Realtime Agent Mode as a known-good-but-not-final lane and stop reopening solved routing / transport issues.
+2. Move immediately to Turn-Based Voice Mode using realtime ASR as the input source and non-realtime TTS as the output lane.
+3. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the TTS Studio route catalog.
+4. Build the first clean `ASR -> LLM -> turn-based TTS` conversational loop before revisiting deeper realtime changes.
 5. Validate provider-backed LLM model discovery against real `OpenAI`, `OpenRouter`, and internal `LiteLLM` endpoints.
 6. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
 7. Record timing notes for:
@@ -112,7 +157,8 @@
 8. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
 9. Evaluate `MOSS-TTSD-v1.0` for studio dialogue generation and keep `moss_realtime` focused on low-latency agent turns only if warm-path latency stays acceptable.
 10. If telephony latency remains too high after shaping fixes, switch the production realtime lane to a smaller model such as Kokoro and keep OpenMOSS in experimental status.
-11. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+11. After Turn-Based Voice Mode is solid, revisit realtime identity using clean human reference WAVs rather than synthetic preview assets as the decisive test.
+12. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Snapshot references
 
