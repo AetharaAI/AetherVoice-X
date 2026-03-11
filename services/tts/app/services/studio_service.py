@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -347,22 +348,35 @@ class StudioService:
 
     def resolve_stream_runtime_truth(self, tenant_id: str, *, requested_route: str, runtime_path_used: str, voice_id: str, metadata: dict[str, Any], fallback_route_used: str | None) -> dict[str, Any]:
         voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
-        selected_voice = voices.get(voice_id) or voices.get("moss_default") or voices.get("chatterbox_default")
+        extra = (metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
+        resolved_voice = extra.get("resolved_voice") if isinstance(extra, dict) else None
+        selected_voice = (
+            VoiceRecord.model_validate(resolved_voice)
+            if isinstance(resolved_voice, dict)
+            else voices.get(voice_id) or voices.get("moss_default") or voices.get("chatterbox_default")
+        )
         realtime_profile = ((metadata.get("extra") or {}).get("realtime_profile") or {}) if isinstance(metadata, dict) else {}
         requested_preset = realtime_profile.get("voice_preset_id") if isinstance(realtime_profile, dict) else None
         notes: list[str] = []
         if runtime_path_used == "moss_realtime":
-            selected_asset = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else None
-            if not selected_asset and selected_voice and selected_voice.generation_prompt:
-                selected_asset = f"generation_prompt:{selected_voice.voice_id}"
-            conditioning_source = self.settings.moss_prompt_audio_path or "moss_default_unconditioned"
-            conditioning_active = bool(self.settings.moss_prompt_audio_path)
-            resolved_asset = selected_asset
+            selected_asset = str(extra.get("reference_audio_path") or "").strip() if isinstance(extra, dict) else ""
+            if not selected_asset and selected_voice and selected_voice.reference_audio_path:
+                selected_asset = selected_voice.reference_audio_path
+            if selected_asset:
+                conditioning_source = selected_asset
+                conditioning_active = True
+                notes.append("Realtime session is using the selected voice reference asset when present.")
+            else:
+                conditioning_source = self.settings.moss_prompt_audio_path or "moss_default_unconditioned"
+                conditioning_active = bool(self.settings.moss_prompt_audio_path)
+                if conditioning_active:
+                    notes.append("Realtime session is falling back to the global prompt WAV because the selected voice has no reference asset.")
+                else:
+                    notes.append("Realtime session has no selected reference asset and no global prompt WAV fallback configured.")
+                if selected_voice and selected_voice.generation_prompt:
+                    notes.append("Voice Generator text prompts do not condition realtime directly; a reference WAV is still required for acoustic binding.")
+            resolved_asset = selected_asset or None
             fallback_voice_path = self.settings.moss_prompt_audio_path or "moss_default_unconditioned"
-            if selected_voice and selected_voice.voice_id != "moss_default":
-                notes.append("Selected voice asset is registry-bound only in realtime right now; the sidecar still uses the default global prompt path.")
-            if not conditioning_active:
-                notes.append("Realtime conditioning is not materially changing inference yet. Voice selection is preserved for session truth and future per-session binding.")
             live_chunk_source_route = "moss_realtime.decoder_stream"
             final_artifact_source_route = "moss_realtime.final_decode"
         else:
@@ -462,6 +476,48 @@ class StudioService:
         voices = [VoiceRecord.model_validate(entry) for entry in registry.get("voices", [])]
         filtered = [voice for voice in voices if voice.tenant_id in {None, tenant_id}]
         return sorted(filtered, key=lambda voice: (voice.type, voice.display_name.lower()))
+
+    def resolve_voice_metadata(
+        self,
+        tenant_id: str,
+        *,
+        voice_id: str,
+        model: str,
+        metadata: dict[str, Any] | None,
+        include_audio_bytes: bool = False,
+    ) -> dict[str, Any]:
+        voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
+        selected = voices.get(voice_id) or voices.get("moss_default") or voices.get("chatterbox_default")
+        extra = dict(metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
+        if selected is None:
+            return extra
+        resolved_voice = selected.model_dump(exclude_none=True)
+        extra.setdefault("resolved_voice", resolved_voice)
+        extra.setdefault("selected_voice_id", selected.voice_id)
+        extra.setdefault("selected_voice_asset", selected.display_name)
+        if selected.reference_audio_path:
+            extra.setdefault("reference_audio_path", selected.reference_audio_path)
+            if include_audio_bytes:
+                reference_path = Path(selected.reference_audio_path)
+                if reference_path.exists() and reference_path.is_file():
+                    extra.setdefault("reference_audio_b64", base64.b64encode(reference_path.read_bytes()).decode("ascii"))
+        if selected.reference_text:
+            extra.setdefault("reference_text", selected.reference_text)
+        if selected.generation_prompt:
+            extra.setdefault("generation_prompt", selected.generation_prompt)
+        if model == "moss_ttsd" and selected.reference_audio_path:
+            extra.setdefault(
+                "speaker_references",
+                [
+                    {
+                        "speaker": "S1",
+                        "audio_path": selected.reference_audio_path,
+                        "prompt_text": selected.reference_text or "",
+                        "voice_id": selected.voice_id,
+                    }
+                ],
+            )
+        return extra
 
     def create_voice(self, tenant_id: str, payload: VoiceCreateRequest) -> VoiceRecord:
         registry = self._read_registry()

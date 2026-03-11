@@ -293,9 +293,10 @@ Important operator truth:
 - Seed/example voices should appear automatically in the library.
 - Users do not need to manually recreate them in the UI if the seed file is present.
 
-Current limitation:
-- Voice registry truth and realtime conditioning truth are not the same thing.
-- A selected voice can exist as a registry asset without materially changing realtime inference yet.
+Current status:
+- Voice registry truth and realtime conditioning truth are now converging.
+- A selected voice with a real `reference_audio_path` should now be serialized into the realtime stream-start payload and override the global fallback prompt for that session.
+- If a selected voice has no usable reference asset, realtime falls back to `MOSS_PROMPT_AUDIO_PATH` or the unconditioned default path.
 
 ## 10. OpenMOSS realtime conditioning truth
 
@@ -303,14 +304,14 @@ Relevant logic:
 - [services/tts/app/services/studio_service.py](/home/cory/Aether-Voice-Platform/Aether-Voice-X/services/tts/app/services/studio_service.py)
 
 Current truthful behavior:
-- `moss_realtime` can preserve session truth for voice selection.
-- It can log requested voice, selected asset, and current conditioning source.
-- But realtime inference still tends to use the current default/global conditioning path unless per-session conditioning binding is active.
+- `moss_realtime` preserves session truth for voice selection.
+- The stream-start contract now carries selected voice reference audio into the sidecar when a registry asset exists.
+- The sidecar still falls back to the configured global prompt WAV when no per-session reference asset is available.
 
 This is why the UI was changed to stop lying.
 
 Do not assume:
-- “selected voice in UI” means “realtime timbre materially changed”
+- “selected voice in UI” guarantees a timbre change if the selected record has no usable reference asset
 
 Do assume:
 - current UI now attempts to tell the truth about whether conditioning is active or registry-only

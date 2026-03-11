@@ -298,7 +298,7 @@ export function TTSLive() {
             <p className="field-hint">
               {runtimeTruth?.conditioning_active
                 ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
-                : "This binds a registry voice record to the session, but realtime inference is still using the current default conditioning path until per-session conditioning lands."}
+                : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
             </p>
           </div>
           <div className="field-group">

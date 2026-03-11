@@ -70,6 +70,17 @@ class StreamingService:
     def _runtime_metadata(runtime: StreamRuntimeTruth) -> dict[str, Any]:
         return runtime.model_dump(exclude_none=True)
 
+    def _prepare_stream_request(self, request: TTSStreamStartRequest, *, include_audio_bytes: bool) -> TTSStreamStartRequest:
+        metadata = dict(request.metadata)
+        metadata["extra"] = self.studio_service.resolve_voice_metadata(
+            request.tenant_id,
+            voice_id=request.voice,
+            model=request.model,
+            metadata=request.metadata,
+            include_audio_bytes=include_audio_bytes,
+        )
+        return request.model_copy(update={"metadata": metadata})
+
     async def start(self, request: TTSStreamStartRequest) -> dict:
         fallback_used = False
         fallback_route_used: str | None = None
@@ -89,9 +100,10 @@ class StreamingService:
             adapter = fallback
             adapter_configured = getattr(adapter, "configured", False) or getattr(adapter, "ready", False)
             fallback_route_used = adapter.name if adapter.name != request.model else None
+        prepared_request = self._prepare_stream_request(request, include_audio_bytes=adapter.name == "moss_realtime")
         if adapter.supports_streaming and adapter_configured:
             try:
-                stream_session = await adapter.start_stream(request)
+                stream_session = await adapter.start_stream(prepared_request)
             except Exception:
                 fallback_used = True
                 fallback = self.registry.fallback_stream()
@@ -99,13 +111,14 @@ class StreamingService:
                     voice_model_fallback_total.labels(service="tts", requested=request.model, used=fallback.name).inc()
                 adapter = fallback
                 fallback_route_used = adapter.name if adapter.name != request.model else None
+                prepared_request = self._prepare_stream_request(request, include_audio_bytes=adapter.name == "moss_realtime")
         runtime_truth = self._runtime_truth(
-            request,
+            prepared_request,
             runtime_path_used=adapter.name,
             fallback_route_used=fallback_route_used,
         )
         self.sessions[request.session_id] = {
-            "request": request,
+            "request": prepared_request,
             "adapter": adapter,
             "mode": "adapter" if stream_session is not None else "microbatch",
             "chunks": [],
@@ -149,13 +162,13 @@ class StreamingService:
             },
         )
         return {
-            "session_id": request.session_id,
-            "model": adapter.name,
-            "expires_in_seconds": 3600,
-            "model_requested": request.model,
-            "model_used": adapter.name,
-            "fallback_used": fallback_used,
-            "runtime": self._runtime_metadata(runtime_truth),
+                "session_id": request.session_id,
+                "model": adapter.name,
+                "expires_in_seconds": 3600,
+                "model_requested": prepared_request.model,
+                "model_used": adapter.name,
+                "fallback_used": fallback_used,
+                "runtime": self._runtime_metadata(runtime_truth),
         }
 
     async def push(self, session_id: str, text: str) -> list[dict]:

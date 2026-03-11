@@ -10,6 +10,7 @@ import time
 import wave
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -214,6 +215,46 @@ def _load_audio(path: str, target_sample_rate: int) -> torch.Tensor:
     return wav
 
 
+def _load_audio_bytes(payload: bytes, target_sample_rate: int) -> torch.Tensor:
+    wav, sr = torchaudio.load(io.BytesIO(payload))
+    if sr != target_sample_rate:
+        wav = torchaudio.functional.resample(wav, sr, target_sample_rate)
+    if wav.shape[0] > 1:
+        wav = wav.mean(dim=0, keepdim=True)
+    return wav
+
+
+def _encode_prompt_tokens(codec: Any, device: torch.device, prompt_audio: torch.Tensor) -> np.ndarray:
+    with torch.inference_mode():
+        prompt_result = codec.encode(prompt_audio.unsqueeze(0).to(device))
+    prompt_tokens = _extract_codes(prompt_result)
+    if isinstance(prompt_tokens, torch.Tensor):
+        prompt_tokens = prompt_tokens.squeeze(1).detach().cpu().numpy()
+    return prompt_tokens
+
+
+def _session_prompt_tokens(runtime: RuntimeAssets, metadata: dict[str, Any] | None) -> tuple[np.ndarray | None, str]:
+    extra = _metadata_extra(metadata)
+    reference_audio_b64 = str(extra.get("reference_audio_b64") or "").strip()
+    reference_audio_path = str(extra.get("reference_audio_path") or "").strip()
+    if reference_audio_b64:
+        try:
+            prompt_audio = _load_audio_bytes(base64.b64decode(reference_audio_b64), target_sample_rate=runtime.sample_rate)
+            return _encode_prompt_tokens(runtime.codec, runtime.device, prompt_audio), reference_audio_path or "embedded_session_reference_audio"
+        except Exception:
+            logger.warning("moss_realtime failed to decode session reference_audio_b64", exc_info=True)
+    if reference_audio_path and Path(reference_audio_path).exists():
+        try:
+            prompt_audio = _load_audio(reference_audio_path, target_sample_rate=runtime.sample_rate)
+            return _encode_prompt_tokens(runtime.codec, runtime.device, prompt_audio), reference_audio_path
+        except Exception:
+            logger.warning("moss_realtime failed to load session reference_audio_path", exc_info=True)
+    prompt_audio_path = os.getenv("MOSS_PROMPT_AUDIO_PATH")
+    if runtime.prompt_tokens is not None:
+        return runtime.prompt_tokens, prompt_audio_path or "embedded_global_prompt_audio"
+    return None, "moss_default_unconditioned"
+
+
 def _sanitize_audio_tokens(tokens: torch.Tensor, *, codebook_size: int, audio_eos_token: int) -> torch.Tensor:
     if tokens.dim() == 3:
         tokens = tokens[0]
@@ -388,11 +429,7 @@ def _build_runtime() -> RuntimeAssets:
     prompt_audio_path = os.getenv("MOSS_PROMPT_AUDIO_PATH")
     if prompt_audio_path:
         prompt_audio = _load_audio(prompt_audio_path, target_sample_rate=sample_rate)
-        with torch.inference_mode():
-            prompt_result = codec.encode(prompt_audio.unsqueeze(0).to(device))
-        prompt_tokens = _extract_codes(prompt_result)
-        if isinstance(prompt_tokens, torch.Tensor):
-            prompt_tokens = prompt_tokens.squeeze(1).detach().cpu().numpy()
+        prompt_tokens = _encode_prompt_tokens(codec, device, prompt_audio)
 
     return RuntimeAssets(
         device=device,
@@ -454,6 +491,7 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
             detail=f"MOSS realtime sidecar is configured for {runtime.sample_rate} Hz audio.",
         )
     tuning = _realtime_tuning(payload.metadata, runtime)
+    session_prompt_tokens, conditioning_source = _session_prompt_tokens(runtime, payload.metadata)
     inferencer = MossTTSRealtimeInference(runtime.model, runtime.tokenizer, max_length=int(tuning["max_length"]))
     inferencer.reset_generation_state(keep_cache=False)
     if hasattr(inferencer, "_should_compile_local_transformer"):
@@ -474,10 +512,10 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         repetition_penalty=float(tuning["repetition_penalty"]),
         repetition_window=int(tuning["repetition_window"]),
     )
-    if runtime.prompt_tokens is not None:
-        session.set_voice_prompt_tokens(runtime.prompt_tokens)
+    if session_prompt_tokens is not None:
+        session.set_voice_prompt_tokens(session_prompt_tokens)
     session.reset_turn(
-        input_ids=_assistant_only_input_ids(runtime.processor, runtime.tokenizer, runtime.prompt_tokens),
+        input_ids=_assistant_only_input_ids(runtime.processor, runtime.tokenizer, session_prompt_tokens),
         include_system_prompt=False,
         reset_cache=True,
     )
@@ -495,7 +533,7 @@ async def start_stream(payload: StreamStartRequest) -> dict[str, Any]:
         output_format=payload.format,
         requested_voice=payload.voice,
         context_mode=payload.context_mode,
-        conditioning_source=prompt_audio_path if (prompt_audio_path := os.getenv("MOSS_PROMPT_AUDIO_PATH")) else "moss_default_unconditioned",
+        conditioning_source=conditioning_source,
     )
     logger.info(
         "moss_stream_started",

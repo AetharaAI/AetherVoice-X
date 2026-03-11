@@ -25,6 +25,7 @@
 - Live TTS backend: OpenMOSS sidecar adapter path is now wired behind the existing `/v1/tts/stream/*` contract, with unit coverage for adapter-driven streaming and chatterbox fallback.
 - Live TTS operator console: chunk playback, final WAV playback, explicit download controls, and stream-state feedback are now visible in the browser.
 - TTS Live contract fix: operator-side structured controls no longer need to be prepended into spoken text, and the existing live playback contract remains intact.
+- TTS Live conditioning contract: selected voice reference audio is now forwarded into `moss_realtime` at stream start, with `MOSS_PROMPT_AUDIO_PATH` kept only as the fallback prompt path.
 - TTS Studio phase 1 scaffolding: additive studio backend and new top-level UI surface are now present without replacing the existing TTS Live lane.
 - TTS Studio voice design preview: `moss_voice_generator` is now runtime-backed, warms successfully, and renders end-to-end through the browser.
 
@@ -55,6 +56,7 @@
   - TTS service now prefers true adapter lifecycle over fake chunked batch synth when the sidecar is available
   - fallback to chatterbox micro-batching remains in place when the sidecar is unavailable
   - sidecar build, boot, chunk streaming, and final WAV assembly are now working
+  - per-session reference audio now overrides the global prompt WAV when the selected voice has a usable registry asset
   - first-turn latency remains poor enough to be a telephony concern, while second-turn latency is materially better
   - current quality blocker is prompt/alignment behavior rather than transport bring-up
   - current product blocker is voice catalog and conditioning readiness for a public-facing studio
@@ -80,6 +82,8 @@
   - quick-copy and transcript download actions
 - The file ASR page now supports explicit model selection for comparison runs.
 - The TTS Live page now treats session profile, tone, cadence, style, and latency profile as console-side structured state rather than spoken markup.
+- The TTS Live page now exposes stream-start tuning knobs for immediate realtime quality tests without changing env defaults.
+- Realtime voice truth has changed: selected voice reference audio should now materially override the global fallback prompt on stream start when that asset exists and can be serialized from the voice registry.
 - The new TTS Studio page now exposes:
   - Voice Library
   - Voice Clone
@@ -93,8 +97,8 @@
 ## Immediate next steps
 
 1. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the new TTS Studio route catalog.
-2. Add per-voice asset promotion flows so imported and generated voices can be bound cleanly into OpenMOSS runtime requests.
-3. Test realtime conditioning against the pinned default prompt WAV and work the first-turn token shaping problem for telephony voice agents.
+2. Validate that imported and generated registry assets produce materially different `moss_realtime` timbre now that per-session reference audio binding is in place.
+3. Test realtime conditioning against the pinned default prompt WAV fallback and work the first-turn token shaping problem for telephony voice agents.
 4. Rework `moss_realtime` turn construction so operator metadata remains structured state and does not leak into spoken output.
 5. Validate provider-backed LLM model discovery against real `OpenAI`, `OpenRouter`, and internal `LiteLLM` endpoints.
 6. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.

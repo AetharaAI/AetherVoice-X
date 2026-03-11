@@ -85,9 +85,11 @@ class FakeMossAdapter:
     def __init__(self) -> None:
         self.started = False
         self.pushed: list[str] = []
+        self.start_request = None
 
     async def start_stream(self, request) -> object:
         self.started = True
+        self.start_request = request
         return object()
 
     async def push_text(self, session_id: str, text: str) -> list[dict]:
@@ -142,6 +144,24 @@ class FakeSettings:
 
 
 class FakeStudioService:
+    def resolve_voice_metadata(self, tenant_id: str, *, voice_id: str, model: str, metadata: dict, include_audio_bytes: bool = False) -> dict:
+        extra = dict(metadata.get("extra") or {})
+        extra.update(
+            {
+                "resolved_voice": {
+                    "voice_id": voice_id,
+                    "display_name": "Test Voice",
+                    "reference_audio_path": "/tmp/reference.wav",
+                },
+                "selected_voice_id": voice_id,
+                "selected_voice_asset": "Test Voice",
+                "reference_audio_path": "/tmp/reference.wav",
+            }
+        )
+        if include_audio_bytes:
+            extra["reference_audio_b64"] = "dGVzdA=="
+        return extra
+
     def resolve_stream_runtime_truth(self, tenant_id: str, *, requested_route: str, runtime_path_used: str, voice_id: str, metadata: dict, fallback_route_used: str | None) -> dict:
         return {
             "requested_route": requested_route,
@@ -175,8 +195,9 @@ def _request(model: str = "moss_realtime") -> TTSStreamStartRequest:
 
 
 def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
+    adapter = FakeMossAdapter()
     service = StreamingService(
-        registry=FakeRegistry(FakeMossAdapter(), FakeChatterboxAdapter()),
+        registry=FakeRegistry(adapter, FakeChatterboxAdapter()),
         synthesis_service=FakeSynthesisService(),
         redis=FakeRedis(),
         telemetry=FakeTelemetry(),
@@ -191,6 +212,9 @@ def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
 
     assert start["model"] == "moss_realtime"
     assert start["runtime"]["runtime_path_used"] == "moss_realtime"
+    assert adapter.start_request is not None
+    assert adapter.start_request.metadata["extra"]["reference_audio_path"] == "/tmp/reference.wav"
+    assert adapter.start_request.metadata["extra"]["reference_audio_b64"] == "dGVzdA=="
     assert events and events[0]["type"] == "audio_chunk"
     assert events[0]["metadata"]["runtime"]["live_chunk_source_route"] == "moss_realtime.live"
     assert result.model_used == "moss_realtime"

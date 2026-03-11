@@ -30,34 +30,13 @@ class SynthesisService:
             return 0
 
     def _resolve_voice_metadata(self, request: TTSRequest) -> dict:
-        voices = {voice.voice_id: voice for voice in self.studio_service.list_voices(request.tenant_id)}
-        selected = voices.get(request.voice) or voices.get("moss_default") or voices.get("chatterbox_default")
-        extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
-        if selected is None:
-            return extra
-        resolved_voice = selected.model_dump(exclude_none=True)
-        extra.setdefault("resolved_voice", resolved_voice)
-        extra.setdefault("selected_voice_id", selected.voice_id)
-        extra.setdefault("selected_voice_asset", selected.display_name)
-        if selected.reference_audio_path:
-            extra.setdefault("reference_audio_path", selected.reference_audio_path)
-        if selected.reference_text:
-            extra.setdefault("reference_text", selected.reference_text)
-        if selected.generation_prompt:
-            extra.setdefault("generation_prompt", selected.generation_prompt)
-        if request.model == "moss_ttsd" and selected.reference_audio_path:
-            extra.setdefault(
-                "speaker_references",
-                [
-                    {
-                        "speaker": "S1",
-                        "audio_path": selected.reference_audio_path,
-                        "prompt_text": selected.reference_text or "",
-                        "voice_id": selected.voice_id,
-                    }
-                ],
-            )
-        return extra
+        return self.studio_service.resolve_voice_metadata(
+            request.tenant_id,
+            voice_id=request.voice,
+            model=request.model,
+            metadata=request.metadata,
+            include_audio_bytes=False,
+        )
 
     @staticmethod
     def _chatterbox_safe_voice(request: TTSRequest) -> tuple[str, dict[str, Any]]:
