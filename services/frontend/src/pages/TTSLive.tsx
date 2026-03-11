@@ -116,11 +116,11 @@ export function TTSLive() {
   const [speakingStyle, setSpeakingStyle] = useState("service");
   const [latencyMode, setLatencyMode] = useState("low_latency");
   const [sampleRate, setSampleRate] = useState(24000);
-  const [prefillTextLen, setPrefillTextLen] = useState(6);
-  const [decodeChunkFrames, setDecodeChunkFrames] = useState(3);
+  const [prefillTextLen, setPrefillTextLen] = useState(24);
+  const [decodeChunkFrames, setDecodeChunkFrames] = useState(6);
   const [decodeOverlapFrames, setDecodeOverlapFrames] = useState(0);
-  const [temperature, setTemperature] = useState(0.8);
-  const [topP, setTopP] = useState(0.6);
+  const [temperature, setTemperature] = useState(0.45);
+  const [topP, setTopP] = useState(0.65);
   const [topK, setTopK] = useState(30);
   const [repetitionPenalty, setRepetitionPenalty] = useState(1.1);
   const [repetitionWindow, setRepetitionWindow] = useState(50);
