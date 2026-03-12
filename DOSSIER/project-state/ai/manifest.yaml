@@ -1,0 +1,20 @@
+version: 1
+package: project-state
+purpose: canonical_machine_readable_project_state
+read_order:
+  - project-state/ai/current-state.yaml
+  - project-state/ai/runtime-contracts.yaml
+  - project-state/ai/repo-map.yaml
+human_context:
+  architecture: project-state/human/Architecture-Overview.md
+  runtime: project-state/human/Runtime-Contracts.md
+  changelog: project-state/human/Changelog.md
+bootstrap_templates:
+  agents: project-state/bootstrap/AGENTS.md
+  memory: project-state/bootstrap/MEMORY.md
+  claude: project-state/bootstrap/CLAUDE.md
+  gemini: project-state/bootstrap/GEMINI.md
+rules:
+  no_secrets: true
+  current_truth_only_in_ai_docs: true
+  changelog_history_lives_in_human_docs: true

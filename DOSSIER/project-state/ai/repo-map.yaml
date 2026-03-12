@@ -1,0 +1,38 @@
+version: 1
+repo_name: Agent-Harness-PolyMorph
+important_paths:
+  topology_doc:
+    path: AETHERPRO_INFRA_TOPOLOGY.md
+    purpose: infra_and_node_map
+  harness_root:
+    path: mini-agent
+    purpose: active_harness_codebase
+  harness_backend:
+    path: mini-agent/backend
+    purpose: api_runtime_providers_tools_memory
+  harness_frontend:
+    path: mini-agent/frontend
+    purpose: operator_ui
+  harness_docs:
+    path: mini-agent/docs
+    purpose: implementation_and_reference_docs
+  project_state:
+    path: project-state
+    purpose: machine_and_human_readable_state_package
+  model_tests:
+    path: model-test
+    purpose: benchmark_prompts_and_results
+  local_model_notes:
+    path: model-cards
+    purpose: model_capability_and_ops_notes
+  node_configs_l40s_90:
+    path: L40S-90
+    purpose: local_inference_router_and_compose_configs
+  node_configs_l40s_180:
+    path: litellm-L40S-180
+    purpose: secondary_inference_node_configs
+entrypoints:
+  backend_main: mini-agent/backend/main.py
+  agent_loop: mini-agent/backend/agent/runner.py
+  tool_registry: mini-agent/backend/agent/tools/registry.py
+  provider_base: mini-agent/backend/agent/providers/base.py

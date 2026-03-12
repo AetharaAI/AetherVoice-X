@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import time
 import wave
+from copy import deepcopy
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,6 +136,47 @@ def _load_audio(path: str) -> tuple[torch.Tensor, int]:
     return wav, int(sample_rate)
 
 
+def _normalize_reference_audio(
+    path: str,
+    *,
+    target_sample_rate: int,
+    temp_dir: Path,
+    prefix: str,
+) -> tuple[str, dict[str, Any]]:
+    source_path = Path(path).expanduser()
+    if not source_path.exists():
+        raise ValueError(f"Reference audio path does not exist: {source_path}")
+
+    wav, sample_rate = torchaudio.load(source_path.as_posix())
+    source_channels = int(wav.shape[0]) if wav.ndim > 1 else 1
+    mono_mixed = False
+    resampled = False
+
+    if source_channels > 1:
+        wav = wav.mean(dim=0, keepdim=True)
+        mono_mixed = True
+
+    if int(sample_rate) != int(target_sample_rate):
+        wav = torchaudio.functional.resample(wav, int(sample_rate), int(target_sample_rate))
+        resampled = True
+
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    normalized_path = temp_dir / f"{prefix}_{source_path.stem}_{target_sample_rate}.wav"
+    torchaudio.save(normalized_path.as_posix(), wav.cpu(), int(target_sample_rate))
+
+    artifacts = {
+        "original_reference_audio_path": source_path.as_posix(),
+        "normalized_reference_audio_path": normalized_path.as_posix(),
+        "reference_audio_source_sample_rate": int(sample_rate),
+        "reference_audio_target_sample_rate": int(target_sample_rate),
+        "reference_audio_source_channels": source_channels,
+        "reference_audio_resampled": resampled,
+        "reference_audio_mono_mixed": mono_mixed,
+    }
+    logger.info("moss_family_reference_audio_normalized", extra=artifacts)
+    return normalized_path.as_posix(), artifacts
+
+
 def _to_pcm_wav(audio_np: np.ndarray, sample_rate: int) -> bytes:
     pcm = np.clip(audio_np.astype(np.float32), -1.0, 1.0)
     pcm16 = (pcm * 32767.0).astype(np.int16)
@@ -181,7 +223,12 @@ def _extract_audio_np(messages: Any) -> np.ndarray:
     return audio_np.astype(np.float32, copy=False)
 
 
-def _build_conversations(runtime: RuntimeAssets, request: SynthesizeRequest) -> tuple[list[list[Any]], str, dict[str, Any]]:
+def _build_conversations(
+    runtime: RuntimeAssets,
+    request: SynthesizeRequest,
+    *,
+    temp_dir: Path | None = None,
+) -> tuple[list[list[Any]], str, dict[str, Any]]:
     extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
     resolved_voice = dict(extra.get("resolved_voice") or {})
     generation_prompt = (
@@ -199,6 +246,7 @@ def _build_conversations(runtime: RuntimeAssets, request: SynthesizeRequest) -> 
         "fallback_route_used": None,
     }
     processor = runtime.processor
+    normalized_dir = temp_dir or Path(tempfile.mkdtemp(prefix="moss-family-ref-"))
 
     if runtime.kind == "voice_generator":
         instruction = str(generation_prompt or "").strip()
@@ -221,16 +269,60 @@ def _build_conversations(runtime: RuntimeAssets, request: SynthesizeRequest) -> 
         dialogue_text = _normalized_dialogue_text(request.text)
         conversations = [[processor.build_user_message(text=dialogue_text)]]
         if speaker_references:
-            artifacts["speaker_references"] = speaker_references
+            normalized_speakers: list[dict[str, Any]] = []
+            original_speaker_paths: list[str] = []
+            normalized_speaker_paths: list[str] = []
+            speaker_normalization: list[dict[str, Any]] = []
+            for index, speaker in enumerate(speaker_references):
+                if not isinstance(speaker, dict):
+                    normalized_speakers.append(speaker)
+                    continue
+                speaker_copy = deepcopy(speaker)
+                audio_path = str(speaker_copy.get("audio_path") or "").strip()
+                if audio_path:
+                    normalized_path, normalization_artifacts = _normalize_reference_audio(
+                        audio_path,
+                        target_sample_rate=runtime.sample_rate,
+                        temp_dir=normalized_dir,
+                        prefix=f"speaker_{index}",
+                    )
+                    speaker_copy["audio_path"] = normalized_path
+                    original_speaker_paths.append(audio_path)
+                    normalized_speaker_paths.append(normalized_path)
+                    speaker_normalization.append(
+                        {
+                            "speaker_index": index,
+                            **normalization_artifacts,
+                        }
+                    )
+                normalized_speakers.append(speaker_copy)
+            artifacts["speaker_references"] = normalized_speakers
+            if original_speaker_paths:
+                artifacts["original_speaker_reference_paths"] = original_speaker_paths
+                artifacts["normalized_speaker_reference_paths"] = normalized_speaker_paths
+                artifacts["speaker_reference_normalization"] = speaker_normalization
         artifacts["actual_runtime_conditioning_source"] = (
-            speaker_references[0].get("audio_path") if isinstance(speaker_references, list) and speaker_references else "unconditioned_dialogue"
+            artifacts.get("normalized_speaker_reference_paths", [])[0]
+            if artifacts.get("normalized_speaker_reference_paths")
+            else (
+                speaker_references[0].get("audio_path")
+                if isinstance(speaker_references, list) and speaker_references and isinstance(speaker_references[0], dict)
+                else "unconditioned_dialogue"
+            )
         )
         return conversations, "generation", artifacts
 
     user_kwargs: dict[str, Any] = {"text": request.text.strip()}
     if reference_audio_path:
-        user_kwargs["reference"] = [reference_audio_path]
-        artifacts["actual_runtime_conditioning_source"] = reference_audio_path
+        normalized_path, normalization_artifacts = _normalize_reference_audio(
+            str(reference_audio_path),
+            target_sample_rate=runtime.sample_rate,
+            temp_dir=normalized_dir,
+            prefix="tts_reference",
+        )
+        user_kwargs["reference"] = [normalized_path]
+        artifacts["actual_runtime_conditioning_source"] = normalized_path
+        artifacts.update(normalization_artifacts)
     else:
         artifacts["actual_runtime_conditioning_source"] = "unconditioned_tts"
     if reference_text:
@@ -268,32 +360,33 @@ def _build_warmup_request(runtime: RuntimeAssets, metadata: dict[str, Any] | Non
 
 
 def _run_generation(runtime: RuntimeAssets, request: SynthesizeRequest) -> dict[str, Any]:
-    conversations, mode, artifacts = _build_conversations(runtime, request)
-    batch = runtime.processor(conversations, mode=mode)
-    input_ids = batch["input_ids"].to(runtime.device)
-    attention_mask = batch["attention_mask"].to(runtime.device)
+    with tempfile.TemporaryDirectory(prefix="moss-family-ref-") as temp_dir:
+        conversations, mode, artifacts = _build_conversations(runtime, request, temp_dir=Path(temp_dir))
+        batch = runtime.processor(conversations, mode=mode)
+        input_ids = batch["input_ids"].to(runtime.device)
+        attention_mask = batch["attention_mask"].to(runtime.device)
 
-    with torch.no_grad():
-        outputs = runtime.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=runtime.max_new_tokens,
-            audio_temperature=runtime.temperature,
-            audio_top_p=runtime.top_p,
-            audio_top_k=runtime.top_k,
-            audio_repetition_penalty=runtime.repetition_penalty,
-        )
+        with torch.no_grad():
+            outputs = runtime.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=runtime.max_new_tokens,
+                audio_temperature=runtime.temperature,
+                audio_top_p=runtime.top_p,
+                audio_top_k=runtime.top_k,
+                audio_repetition_penalty=runtime.repetition_penalty,
+            )
 
-    messages = runtime.processor.decode(outputs)
-    audio_np = _extract_audio_np(messages)
-    wav_bytes = _to_pcm_wav(audio_np, runtime.sample_rate)
-    final_bytes = _transcode_bytes(wav_bytes, request.format)
-    duration_ms = int((len(audio_np) / float(runtime.sample_rate)) * 1000)
-    return {
-        "audio_bytes": final_bytes,
-        "duration_ms": duration_ms,
-        "artifacts": artifacts,
-    }
+        messages = runtime.processor.decode(outputs)
+        audio_np = _extract_audio_np(messages)
+        wav_bytes = _to_pcm_wav(audio_np, runtime.sample_rate)
+        final_bytes = _transcode_bytes(wav_bytes, request.format)
+        duration_ms = int((len(audio_np) / float(runtime.sample_rate)) * 1000)
+        return {
+            "audio_bytes": final_bytes,
+            "duration_ms": duration_ms,
+            "artifacts": artifacts,
+        }
 
 
 def load_runtime() -> RuntimeAssets:

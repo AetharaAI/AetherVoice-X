@@ -1,0 +1,53 @@
+version: 1
+project:
+  type: internal_harness
+  name: AetherOps_PolyMorph_Internal
+  product_mode: internal_only
+runtime:
+  primary_harness_path: mini-agent
+  provider_mode: direct_openai_with_explicit_router_failover
+  primary_model: gpt-5.4
+  direct_openai_base_url: https://api.openai.com/v1
+  local_router_base_url: https://api.aetherpro.tech/v1
+  local_fallback_model_target: qwen3.5-35b
+  explicit_fallback_enabled: true
+  explicit_fallback_provider: openai_compat
+  temporal_context_enabled: true
+  temporal_context_includes:
+    - current_utc
+    - current_local_time
+    - resolved_timezone
+    - unix_timestamp
+    - session_created_at
+    - elapsed_since_previous_user_turn
+    - elapsed_since_previous_agent_run
+  direct_audio_multimodal_enabled: false
+  voice_mode_enabled: true
+  voice_mode_path: asr_batch_or_voice_pane_to_qwen35_4b_to_http_tts
+  voice_agent_provider: openai_compat
+  voice_agent_model: qwen3.5-4b
+  voice_agent_base_url: https://api.aetherpro.tech/v1
+openai_notes:
+  chat_completions_supported: true
+  gpt5_requires_max_completion_tokens: true
+  compat_extra_body_must_be_disabled_for_direct_openai: true
+memory_notes:
+  mongo_namespace_bootstrap_pending: false
+  mongo_write_failures_should_not_block_primary_response: true
+voice_services:
+  asr_base_url: https://asr.aetherpro.us
+  tts_base_url: https://tts.aetherpro.us
+  mic_composer_flow: batch_wav_transcription_into_textbox
+  voice_pane_flow: transcript_to_qwen35_4b_then_tts_playback
+model_runner_state:
+  tracked_layout_root: model-runners/
+  l40s_90_active_voice_runner: qwen3.5-4b
+  l40s_90_known_good_runners:
+    - qwen3.5-35b
+    - qwen3.5-9b
+    - qwen3.5-4b
+known_active_docs:
+  topology: AETHERPRO_INFRA_TOPOLOGY.md
+  technical_reference: mini-agent/docs/AetherOps-Harness-Technical-Reference.md
+  public_capabilities: mini-agent/docs/AetherOps-Harness-Public-Capabilities.md
+  roadmap: mini-agent/docs/Autonomous-Control-Plane-Roadmap.md

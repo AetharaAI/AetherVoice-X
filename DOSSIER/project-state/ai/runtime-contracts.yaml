@@ -1,0 +1,150 @@
+version: 1
+provider_contract:
+  file: mini-agent/backend/agent/providers/base.py
+  interface:
+    method: generate
+    args:
+      - system
+      - tools
+      - messages
+      - max_tokens
+      - temperature
+      - on_stream_event
+  implementations:
+    - mini-agent/backend/agent/providers/anthropic_provider.py
+    - mini-agent/backend/agent/providers/openai_provider.py
+    - mini-agent/backend/agent/providers/openai_compat_provider.py
+    - mini-agent/backend/agent/providers/failover_provider.py
+  selection:
+    openai: direct_openai_adapter
+    openai_compat: openai_compatible_router_adapter
+    anthropic: anthropic_adapter
+  fallback_policy:
+    enabled_env: AGENT_ENABLE_FALLBACK
+    explicit_fallback_envs:
+      - AGENT_FALLBACK_PROVIDER
+      - AGENT_FALLBACK_BASE_URL
+      - AGENT_FALLBACK_API_KEY
+      - AGENT_FALLBACK_MODEL
+    implicit_router_envs:
+      - LITELLM_MODEL_BASE_URL
+      - LITELLM_API_KEY
+      - LITELLM_MODEL_NAME
+      - LITELLM_2_MODEL_BASE_URL
+      - LITELLM_2_API_KEY
+      - LITELLM_2_MODEL_NAME
+    activation_rule: only_on_provider_error_or_empty_payload
+  openai_direct_contract:
+    endpoint: /v1/chat/completions
+    token_param_for_gpt5: max_completion_tokens
+    disallow_compat_extra_body: true
+    tool_format: openai_chat_completions_tools
+  capabilities:
+    image_prompt_blocks_declared_per_provider: true
+api_contract:
+  base_service: mini-agent/backend
+  routes:
+    - method: POST
+      path: /api/chat
+    - method: GET
+      path: /api/health
+    - method: GET
+      path: /api/health/diagnostics
+    - method: GET
+      path: /api/connections
+    - method: POST
+      path: /api/connections/test
+    - method: POST
+      path: /api/connections/save
+    - method: POST
+      path: /api/audio/transcribe
+    - method: GET
+      path: /api/voice/config
+    - method: POST
+      path: /api/voice/turn
+    - method: GET
+      path: /api/voice/audio/{session_id}/{filename}
+  chat_extensions:
+    accepts_optional:
+      - audio_input
+      - audio_url
+    direct_audio_contract:
+      audio_input_shape:
+        - data
+        - format
+        - filename?
+        - mime_type?
+        - duration_ms?
+      audio_url_shape:
+        - url
+        - filename?
+        - mime_type?
+        - duration_ms?
+      asr_bypass_required: true
+  voice_mode_contract:
+    request:
+      - session_id
+      - message
+      - history[]
+      - voice_id?
+    response:
+      - assistant_text
+      - provider
+      - model
+      - voice_id
+      - mime_type
+      - audio_url
+    routing:
+      voice_model_envs:
+        - VOICE_AGENT_PROVIDER
+        - VOICE_AGENT_BASE_URL
+        - VOICE_AGENT_API_KEY
+        - VOICE_AGENT_MODEL
+      default_model_target: qwen3.5-4b
+      tts_output_route: /api/voice/audio/{session_id}/{filename}
+tool_contract:
+  registry: mini-agent/backend/agent/tools/registry.py
+  dispatch: mini-agent/backend/agent/tools/registry.py
+  workspace_pattern: workspaces/<session_id>/
+memory_contract:
+  service: mini-agent/backend/memory/service.py
+  backends:
+    - redis
+    - mongodb
+    - qdrant
+    - postgres
+  mongodb:
+    database_name: aether_memory
+    bootstrap_file: mongo-mem/aether-init.js
+    namespace_scope: document_level
+    episode_required_fields:
+      - agent_id
+      - session_id
+      - summary
+      - embedding
+      - created_at
+  namespace_behavior:
+    redis: key_prefix
+    mongodb: document_field
+    postgres: schema_or_shared
+    qdrant: collection_policy_independent
+direct_audio_routing_contract:
+  provider_envs:
+    - DIRECT_AUDIO_PROVIDER
+    - DIRECT_AUDIO_BASE_URL
+    - DIRECT_AUDIO_API_KEY
+    - DIRECT_AUDIO_MODEL
+  phi4_alias_envs:
+    - PHI_4_INSTRUCT_MODEL_BASE_URL
+    - PHI_4_INSTRUCT_API_KEY
+    - PHI_4_INSTRUCT_MODEL_NAME
+  activation_rule: use_when_chat_turn_contains_audio_input_or_audio_url
+  provider_fallback_behavior: no_implicit_asr_pipeline
+  persistence_rule: strip_raw_audio_payloads_before_long_term_memory_write
+voice_http_tts_contract:
+  tts_base_envs:
+    - TTS_BASE_URL
+    - TTS_API_KEY
+  synthesis_route: /tts
+  default_voice_env: VOICE_TTS_PREDEFINED_VOICE_ID
+  default_voice_value: Emily.wav
