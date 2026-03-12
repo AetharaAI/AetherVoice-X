@@ -39,6 +39,16 @@ class SynthesisService:
         )
 
     @staticmethod
+    def _adapter_runtime_truth(adapter: Any) -> dict[str, str]:
+        return {
+            "adapter_name": str(getattr(adapter, "name", adapter.__class__.__name__)),
+            "adapter_kind": adapter.__class__.__name__,
+            "adapter_base_url": str(getattr(adapter, "base_url", "") or ""),
+            "adapter_configured": "true" if bool(getattr(adapter, "configured", False)) else "false",
+            "adapter_ready": "true" if bool(getattr(adapter, "ready", False)) else "false",
+        }
+
+    @staticmethod
     def _chatterbox_safe_voice(request: TTSRequest) -> tuple[str, dict[str, Any]]:
         metadata = dict(request.metadata)
         extra = dict(metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
@@ -60,17 +70,28 @@ class SynthesisService:
         started = __import__("time").perf_counter()
         text, voice = build_input(request.text, request.voice)
         metadata = dict(request.metadata)
-        metadata["extra"] = self._resolve_voice_metadata(request)
+        existing_extra = dict(metadata.get("extra") or {}) if isinstance(metadata.get("extra"), dict) else {}
+        metadata["extra"] = {
+            **existing_extra,
+            **self._resolve_voice_metadata(request),
+        }
         prepared = request.model_copy(update={"text": text, "voice": voice, "metadata": metadata})
         try:
             adapter = self.registry.get(request.model)
         except KeyError:
             adapter = self.registry.fallback_batch()
+        requested_adapter = adapter
+        requested_adapter_truth = self._adapter_runtime_truth(requested_adapter)
         selected_voice = (prepared.metadata.get("extra") or {}).get("resolved_voice") if isinstance(prepared.metadata, dict) else None
         fallback_route_used: str | None = None
+        fallback_reason: str | None = None
+        fallback_exception_type: str | None = None
+        fallback_exception_message: str | None = None
         try:
             audio_bytes, output_format = await adapter.synthesize(prepared)
         except Exception as exc:
+            fallback_exception_type = exc.__class__.__name__
+            fallback_exception_message = str(exc)
             if adapter.name != "chatterbox":
                 fallback = self.registry.fallback_batch()
                 voice_model_fallback_total.labels(service="tts", requested=request.model, used=fallback.name).inc()
@@ -85,13 +106,40 @@ class SynthesisService:
                     )
                 )
                 fallback_route_used = fallback.name
+                fallback_reason = f"{requested_adapter.name} synthesize failed"
                 adapter = fallback
             else:
                 raise exc
+        resolved_adapter_truth = self._adapter_runtime_truth(adapter)
         duration_ms = self._estimate_duration_ms(audio_bytes)
         key = f"tts/{request.tenant_id}/{request.session_id or 'no-session'}/{request.request_id}.{output_format}"
         audio_url = self.storage.upload_bytes(self.settings.s3_bucket_tts, key, audio_bytes, f"audio/{output_format}")
         timings = TimingBreakdown(inference_ms=int((__import__("time").perf_counter() - started) * 1000), encode_ms=0, total_ms=int((__import__("time").perf_counter() - started) * 1000))
+        runtime_truth = {
+            "request_id": request.request_id,
+            "session_id": request.session_id or "",
+            "requested_model": request.model,
+            "requested_voice_id": request.voice,
+            "requested_adapter_name": requested_adapter_truth["adapter_name"],
+            "requested_adapter_kind": requested_adapter_truth["adapter_kind"],
+            "requested_adapter_base_url": requested_adapter_truth["adapter_base_url"],
+            "requested_adapter_configured": requested_adapter_truth["adapter_configured"],
+            "requested_adapter_ready": requested_adapter_truth["adapter_ready"],
+            "resolved_adapter_name": resolved_adapter_truth["adapter_name"],
+            "resolved_adapter_kind": resolved_adapter_truth["adapter_kind"],
+            "resolved_adapter_base_url": resolved_adapter_truth["adapter_base_url"],
+            "resolved_adapter_configured": resolved_adapter_truth["adapter_configured"],
+            "resolved_adapter_ready": resolved_adapter_truth["adapter_ready"],
+            "resolved_voice_id": str(selected_voice.get("voice_id") or prepared.voice) if isinstance(selected_voice, dict) else prepared.voice,
+            "resolved_voice_asset": str(selected_voice.get("display_name") or prepared.voice) if isinstance(selected_voice, dict) else prepared.voice,
+            "resolved_voice_runtime_target": str(selected_voice.get("runtime_target") or "") if isinstance(selected_voice, dict) else "",
+            "resolved_voice_source_model": str(selected_voice.get("source_model") or "") if isinstance(selected_voice, dict) else "",
+            "resolved_reference_audio_path": str((prepared.metadata.get("extra") or {}).get("reference_audio_path") or ""),
+            "fallback_route_used": fallback_route_used or "",
+            "fallback_reason": fallback_reason or "",
+            "fallback_exception_type": fallback_exception_type or "",
+            "fallback_exception_message": fallback_exception_message or "",
+        }
         logger.info(
             "tts_completed",
             extra={
@@ -105,6 +153,7 @@ class SynthesisService:
                 "status": "ok",
             },
         )
+        logger.info("tts_runtime_truth", extra=runtime_truth)
         return (
             TTSResult(
                 request_id=request.request_id,
@@ -122,7 +171,11 @@ class SynthesisService:
                     or (prepared.metadata.get("extra") or {}).get("generation_prompt")
                     or "default",
                     "fallback_route_used": fallback_route_used,
+                    "fallback_reason": fallback_reason or "",
+                    "fallback_exception_type": fallback_exception_type or "",
+                    "fallback_exception_message": fallback_exception_message or "",
                     "requested_model": request.model,
+                    **runtime_truth,
                 },
             ),
             audio_bytes,

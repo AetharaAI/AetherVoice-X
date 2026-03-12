@@ -254,6 +254,20 @@ export function ASRLive() {
             <p className="muted">
               Reply session <strong>{turnResult.session_id}</strong> used <strong>{turnResult.llm_model_used}</strong> for generation and <strong>{turnResult.tts_model_used}</strong> for synthesis.
             </p>
+            <details>
+              <summary>Runtime truth</summary>
+              <div className="key-value-grid">
+                <div className="key-value-row"><span>Requested adapter</span><strong>{String(turnResult.artifacts?.requested_adapter_name ?? "n/a")}</strong></div>
+                <div className="key-value-row"><span>Resolved adapter</span><strong>{String(turnResult.artifacts?.resolved_adapter_name ?? "n/a")}</strong></div>
+                <div className="key-value-row"><span>Resolved host</span><strong>{String(turnResult.artifacts?.resolved_adapter_base_url ?? "n/a")}</strong></div>
+                <div className="key-value-row"><span>Requested voice</span><strong>{String(turnResult.artifacts?.requested_voice_id ?? turnVoiceId)}</strong></div>
+                <div className="key-value-row"><span>Resolved voice</span><strong>{String(turnResult.artifacts?.resolved_voice_asset ?? "n/a")}</strong></div>
+                <div className="key-value-row"><span>Voice runtime target</span><strong>{String(turnResult.artifacts?.resolved_voice_runtime_target ?? "n/a")}</strong></div>
+                <div className="key-value-row"><span>Fallback route</span><strong>{String(turnResult.artifacts?.fallback_route_used ?? "none")}</strong></div>
+                <div className="key-value-row"><span>Fallback reason</span><strong>{String(turnResult.artifacts?.fallback_reason ?? "none")}</strong></div>
+                <div className="key-value-row"><span>Fallback error</span><strong>{String(turnResult.artifacts?.fallback_exception_message ?? "none")}</strong></div>
+              </div>
+            </details>
           </div>
         ) : null}
         <p className="muted">This lane uses the saved provider/model from <code className="inline-code">TTS Studio -&gt; LLM Routing</code>, waits for a final Voxtral transcript, then synthesizes a full batch reply instead of hard realtime audio.</p>

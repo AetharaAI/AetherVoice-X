@@ -197,6 +197,29 @@ class SessionService:
         )
         await self.redis.hset(f"voice:session:{session_id}:meta", mapping={"status": "ended", "ended_at": datetime.now(timezone.utc).isoformat()})
 
+    async def update_session_runtime(self, session_id: str, *, model_used: str | None = None, metadata_patch: dict[str, Any] | None = None) -> None:
+        metadata_patch = metadata_patch or {}
+        await self.db.execute(
+            """
+            UPDATE voice_sessions
+            SET model_used = COALESCE(%(model_used)s, model_used),
+                metadata = metadata || %(metadata_patch)s::jsonb
+            WHERE id = %(id)s
+            """,
+            {
+                "id": session_id,
+                "model_used": model_used,
+                "metadata_patch": json.dumps(metadata_patch),
+            },
+        )
+        redis_mapping: dict[str, str] = {}
+        if model_used is not None:
+            redis_mapping["model"] = model_used
+        if metadata_patch:
+            redis_mapping["metadata_patch"] = json.dumps(metadata_patch)
+        if redis_mapping:
+            await self.redis.hset(f"voice:session:{session_id}:meta", mapping=redis_mapping)
+
     def _normalize_session_row(self, row: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(row)
         tenant_id = normalized.get("tenant_id")

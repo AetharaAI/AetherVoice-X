@@ -138,6 +138,10 @@ def test_synthesis_service_uses_chatterbox_safe_voice_on_openmoss_fallback() -> 
     assert chatterbox.requests[0].metadata["extra"]["fallback_voice_route"] == "chatterbox_default"
     assert result.model_used == "chatterbox"
     assert result.artifacts["fallback_route_used"] == "chatterbox"
+    assert result.artifacts["requested_adapter_name"] == "moss_voice_generator"
+    assert result.artifacts["resolved_adapter_name"] == "chatterbox"
+    assert result.artifacts["fallback_reason"] == "moss_voice_generator synthesize failed"
+    assert result.artifacts["fallback_exception_type"] == "RuntimeError"
 
 
 def test_chatterbox_adapter_defaults_non_chatterbox_registry_voice_ids() -> None:

@@ -95,6 +95,34 @@ async def voice_turn(
     artifacts.setdefault("asr_session_id", extra.get("asr_session_id"))
     result["artifacts"] = artifacts
     result["audio_url"] = _browser_artifact_url(storage_uri)
+    runtime_truth = {
+        "llm_provider": result.get("llm_provider"),
+        "llm_model_requested": result.get("llm_model_requested"),
+        "llm_model_used": result.get("llm_model_used"),
+        "tts_model_requested": result.get("tts_model_requested"),
+        "tts_model_used": result.get("tts_model_used"),
+        "requested_adapter_name": artifacts.get("requested_adapter_name"),
+        "requested_adapter_kind": artifacts.get("requested_adapter_kind"),
+        "requested_adapter_base_url": artifacts.get("requested_adapter_base_url"),
+        "requested_adapter_configured": artifacts.get("requested_adapter_configured"),
+        "requested_adapter_ready": artifacts.get("requested_adapter_ready"),
+        "resolved_adapter_name": artifacts.get("resolved_adapter_name"),
+        "resolved_adapter_kind": artifacts.get("resolved_adapter_kind"),
+        "resolved_adapter_base_url": artifacts.get("resolved_adapter_base_url"),
+        "resolved_adapter_configured": artifacts.get("resolved_adapter_configured"),
+        "resolved_adapter_ready": artifacts.get("resolved_adapter_ready"),
+        "resolved_voice_id": artifacts.get("resolved_voice_id"),
+        "resolved_voice_asset": artifacts.get("resolved_voice_asset"),
+        "resolved_voice_runtime_target": artifacts.get("resolved_voice_runtime_target"),
+        "resolved_voice_source_model": artifacts.get("resolved_voice_source_model"),
+        "resolved_reference_audio_path": artifacts.get("resolved_reference_audio_path"),
+        "fallback_route_used": artifacts.get("fallback_route_used"),
+        "fallback_reason": artifacts.get("fallback_reason"),
+        "fallback_exception_type": artifacts.get("fallback_exception_type"),
+        "fallback_exception_message": artifacts.get("fallback_exception_message"),
+        "storage_uri": storage_uri,
+        "asr_session_id": extra.get("asr_session_id"),
+    }
     await session_service.record_request(
         request_id,
         session_id,
@@ -114,6 +142,11 @@ async def voice_turn(
         result["response_text"],
         storage_uri,
         result["duration_ms"],
+    )
+    await session_service.update_session_runtime(
+        session_id,
+        model_used=f"llm:{result['llm_model_used']} | tts:{result['tts_model_used']}",
+        metadata_patch={"voice_turn_runtime": runtime_truth},
     )
     result["session_id"] = session_id
     return VoiceTurnResponse.model_validate(result)

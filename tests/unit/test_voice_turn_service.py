@@ -99,6 +99,7 @@ def test_voice_turn_service_generates_llm_reply_then_synthesizes_tts() -> None:
     assert synthesis.requests[0].text == "Yes. The technician is still en route and should arrive shortly."
     assert synthesis.requests[0].metadata["extra"]["source_transcript_text"] == _request().transcript_text
     assert synthesis.requests[0].metadata["extra"]["llm_provider"] == "litellm"
+    assert synthesis.requests[0].metadata["source"] == "test"
     assert result.response_text.startswith("Yes.")
     assert result.llm_provider == "litellm"
     assert result.llm_model_used == "qwen3-32b"
