@@ -30,6 +30,14 @@ class TTSClient:
         response.raise_for_status()
         return response.json()
 
+    async def voice_turn(self, payload: dict, *, request_id: str, session_id: str | None, tenant_id: str) -> dict:
+        headers = {"X-Request-Id": request_id, "X-Tenant-Id": tenant_id}
+        if session_id:
+            headers["X-Session-Id"] = session_id
+        response = await self.client.post("/internal/voice/turn", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
     async def start_stream(self, payload: dict, *, request_id: str, session_id: str, tenant_id: str) -> dict:
         headers = {"X-Request-Id": request_id, "X-Session-Id": session_id, "X-Tenant-Id": tenant_id}
         response = await self.client.post("/internal/stream/start", headers=headers, json=payload)

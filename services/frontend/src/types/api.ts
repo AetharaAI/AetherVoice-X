@@ -39,6 +39,32 @@ export interface TTSResponse {
   artifacts: Record<string, string>;
 }
 
+export interface VoiceTurnTimings {
+  llm_ms: number;
+  tts_ms: number;
+  total_ms: number;
+}
+
+export interface VoiceTurnResponse {
+  request_id: string;
+  session_id: string;
+  transcript_text: string;
+  response_text: string;
+  llm_provider: string;
+  llm_model_requested: string;
+  llm_model_used: string;
+  llm_base_url?: string | null;
+  llm_request_id?: string | null;
+  llm_timings: TimingBreakdown;
+  tts_model_requested: string;
+  tts_model_used: string;
+  audio_url: string;
+  duration_ms: number;
+  tts_timings: TimingBreakdown;
+  timings: VoiceTurnTimings;
+  artifacts: Record<string, string>;
+}
+
 export interface HealthResponse {
   status: string;
   service: string;

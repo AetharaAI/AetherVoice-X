@@ -16,7 +16,7 @@ from .dependencies import get_asr_client, get_tts_client
 from .logging import logger
 from .middleware.metrics import MetricsMiddleware
 from .middleware.request_id import RequestIDMiddleware
-from .routers import asr, health, metrics, models, sessions, studio, tts
+from .routers import asr, health, metrics, models, sessions, studio, tts, voice
 from .services.quota_service import QuotaService
 from .services.session_service import SessionService
 
@@ -76,6 +76,7 @@ app.include_router(health.router)
 app.include_router(models.router)
 app.include_router(asr.router)
 app.include_router(tts.router)
+app.include_router(voice.router)
 app.include_router(studio.router)
 app.include_router(sessions.router)
 app.include_router(metrics.router)
@@ -83,6 +84,7 @@ app.include_router(health.router, prefix="/api", include_in_schema=False)
 app.include_router(models.router, prefix="/api", include_in_schema=False)
 app.include_router(asr.router, prefix="/api", include_in_schema=False)
 app.include_router(tts.router, prefix="/api", include_in_schema=False)
+app.include_router(voice.router, prefix="/api", include_in_schema=False)
 app.include_router(studio.router, prefix="/api", include_in_schema=False)
 app.include_router(sessions.router, prefix="/api", include_in_schema=False)
 app.include_router(metrics.router, prefix="/api", include_in_schema=False)

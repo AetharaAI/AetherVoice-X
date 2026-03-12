@@ -439,13 +439,23 @@ class StudioService:
             )
         return providers
 
+    def resolve_provider_request_config(self, provider: str, *, base_url_override: str | None = None) -> tuple[str, dict[str, str]]:
+        if provider == "anthropic":
+            raise ValueError("Anthropic is still stubbed for generation in this pass.")
+        base_url, _api_key, headers, _notes = self._provider_config(provider)
+        resolved_base_url = (base_url_override or base_url or "").rstrip("/")
+        if not resolved_base_url:
+            raise ValueError(f"No base URL is configured for provider '{provider}'.")
+        return resolved_base_url, headers
+
     async def list_provider_models(self, provider: str) -> list[ProviderModel]:
         if provider == "anthropic":
             return []
-        base_url, _api_key, headers, _notes = self._provider_config(provider)
-        if not base_url:
+        try:
+            base_url, headers = self.resolve_provider_request_config(provider)
+        except ValueError:
             return []
-        async with httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=20.0) as client:
+        async with httpx.AsyncClient(base_url=base_url, timeout=20.0) as client:
             response = await client.get("/models", headers=headers)
             response.raise_for_status()
             payload = response.json()

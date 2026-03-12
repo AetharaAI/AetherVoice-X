@@ -11,12 +11,13 @@ from aether_common.telemetry import metrics_content_type, metrics_payload
 
 from .config import get_settings
 from .logging import logger
-from .routers import health, stream, studio, synthesize
+from .routers import health, stream, studio, synthesize, voice
 from .services.model_registry import ModelRegistry
 from .services.streaming_service import StreamingService
 from .services.studio_service import StudioService
 from .services.synthesis_service import SynthesisService
 from .services.telemetry_service import TelemetryService
+from .services.voice_turn_service import VoiceTurnService
 
 settings = get_settings()
 
@@ -38,12 +39,14 @@ async def lifespan(app: FastAPI):
     registry = ModelRegistry()
     studio_service = StudioService(settings)
     synthesis_service = SynthesisService(registry, storage, settings, studio_service)
+    voice_turn_service = VoiceTurnService(settings, studio_service, synthesis_service)
     app.state.db = db
     app.state.redis = redis
     app.state.storage = storage
     app.state.registry = registry
     app.state.studio_service = studio_service
     app.state.synthesis_service = synthesis_service
+    app.state.voice_turn_service = voice_turn_service
     app.state.streaming_service = StreamingService(registry, synthesis_service, redis, TelemetryService(), storage, settings, studio_service)
     logger.info("tts_started")
     try:
@@ -66,6 +69,7 @@ app.include_router(health.router)
 app.include_router(synthesize.router)
 app.include_router(stream.router)
 app.include_router(studio.router)
+app.include_router(voice.router)
 
 
 @app.get("/metrics", include_in_schema=False)

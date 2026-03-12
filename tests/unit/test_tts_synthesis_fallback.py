@@ -59,6 +59,18 @@ class FakeStudioService:
             ),
         ]
 
+    def resolve_voice_metadata(self, tenant_id: str, *, voice_id: str, model: str, metadata: dict, include_audio_bytes: bool = False) -> dict:
+        for voice in self.list_voices(tenant_id):
+            if voice.voice_id != voice_id:
+                continue
+            return {
+                "resolved_voice": voice.model_dump(exclude_none=True),
+                "selected_voice_id": voice.voice_id,
+                "selected_voice_asset": voice.display_name,
+                "reference_audio_path": voice.reference_audio_path,
+            }
+        return {}
+
 
 class FakeFailingAdapter:
     name = "moss_voice_generator"
