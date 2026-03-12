@@ -122,3 +122,39 @@ def test_voice_turn_service_requires_enabled_routing() -> None:
         assert "disabled" in str(exc)
     else:
         raise AssertionError("Expected disabled routing to fail.")
+
+
+def test_voice_turn_service_strips_reserved_and_think_tags_before_tts() -> None:
+    synthesis = FakeSynthesisService()
+
+    def client_factory(**kwargs):
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl_456",
+                    "model": "minicpm-v-4.5",
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "<reserved_12><think>I should ask for more context.</think><reserved_13> What can I help you with today?"
+                            }
+                        }
+                    ],
+                },
+            )
+        )
+        return httpx.AsyncClient(base_url=kwargs["base_url"], transport=transport)
+
+    service = VoiceTurnService(
+        settings=object(),
+        studio_service=FakeStudioService(),
+        synthesis_service=synthesis,
+        client_factory=client_factory,
+    )
+
+    result = asyncio.run(service.generate_turn(_request()))
+
+    assert synthesis.requests
+    assert synthesis.requests[0].text == "What can I help you with today?"
+    assert result.response_text == "What can I help you with today?"
