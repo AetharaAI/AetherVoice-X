@@ -4,7 +4,7 @@ import httpx
 from pathlib import Path
 from urllib.parse import urljoin
 
-from .base import BaseTTSAdapter
+from .base import BaseTTSAdapter, BatchSynthesisResult
 from ..schemas.requests import TTSRequest, TTSStreamStartRequest
 from ..schemas.responses import StreamCompletion, StreamSession
 
@@ -45,7 +45,7 @@ class ChatterboxAdapter(BaseTTSAdapter):
     def _resolve_voice_name(self, voice_file: str) -> str:
         return voice_file.rsplit(".", 1)[0]
 
-    async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
+    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult:
         extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
         voice_file = self._resolve_voice_file(request.voice, extra=extra)
         voice_name = self._resolve_voice_name(voice_file)
@@ -89,16 +89,45 @@ class ChatterboxAdapter(BaseTTSAdapter):
                 response = await self.client.post(url, json=payload, headers={"Accept": f"audio/{request.format}"})
                 response.raise_for_status()
                 if response.headers.get("content-type", "").startswith("audio/"):
-                    return response.content, request.format
+                    return BatchSynthesisResult(
+                        audio_bytes=response.content,
+                        output_format=request.format,
+                        model_used=self.name,
+                        artifacts={
+                            "runtime_path_used": self.name,
+                            "chatterbox_voice_file": voice_file,
+                            "chatterbox_voice_name": voice_name,
+                        },
+                    )
                 body = response.json()
                 if "audio_b64" in body:
                     import base64
 
-                    return base64.b64decode(body["audio_b64"]), body.get("format", request.format)
+                    return BatchSynthesisResult(
+                        audio_bytes=base64.b64decode(body["audio_b64"]),
+                        output_format=str(body.get("format", request.format)),
+                        model_used=str(body.get("model") or self.name),
+                        artifacts={
+                            "runtime_path_used": str(body.get("model") or self.name),
+                            "chatterbox_voice_file": voice_file,
+                            "chatterbox_voice_name": voice_name,
+                            **dict(body.get("artifacts") or {}),
+                        },
+                    )
                 if "audio_url" in body:
                     follow_up = await self.client.get(urljoin(f"{self.base_url}/", body["audio_url"]))
                     follow_up.raise_for_status()
-                    return follow_up.content, body.get("format", request.format)
+                    return BatchSynthesisResult(
+                        audio_bytes=follow_up.content,
+                        output_format=str(body.get("format", request.format)),
+                        model_used=str(body.get("model") or self.name),
+                        artifacts={
+                            "runtime_path_used": str(body.get("model") or self.name),
+                            "chatterbox_voice_file": voice_file,
+                            "chatterbox_voice_name": voice_name,
+                            **dict(body.get("artifacts") or {}),
+                        },
+                    )
             except Exception as exc:  # pragma: no cover - depends on external Chatterbox shape
                 last_exc = exc
         raise RuntimeError(f"Unable to synthesize via Chatterbox passthrough: {last_exc}")

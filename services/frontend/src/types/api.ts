@@ -62,7 +62,7 @@ export interface VoiceTurnResponse {
   duration_ms: number;
   tts_timings: TimingBreakdown;
   timings: VoiceTurnTimings;
-  artifacts: Record<string, string>;
+  artifacts: Record<string, unknown>;
 }
 
 export interface HealthResponse {

@@ -20,6 +20,18 @@ function preferredTurnRoute(routes: StudioRouteDescriptor[]) {
   );
 }
 
+function artifactString(
+  artifacts: Record<string, unknown> | undefined,
+  key: string,
+  fallback = "n/a",
+): string {
+  const value = artifacts?.[key];
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  return String(value);
+}
+
 export function ASRLive() {
   const {
     connected,
@@ -52,6 +64,12 @@ export function ASRLive() {
   const turnRoutes = (studioOverview?.routes ?? []).filter((route) => route.mode === "batch" || route.name === "chatterbox");
   const turnVoices = studioOverview?.voices ?? [];
   const routing = studioOverview?.routing ?? null;
+  const turnArtifacts = turnResult?.artifacts;
+  const runtimeRouteUsed = artifactString(turnArtifacts, "runtime_path_used", turnResult?.tts_model_used ?? "pending");
+  const runtimeVoiceLabel = artifactString(turnArtifacts, "resolved_voice_asset", turnVoices.find((voice) => voice.voice_id === turnVoiceId)?.display_name ?? turnVoiceId);
+  const runtimeConditioningSource = artifactString(turnArtifacts, "actual_runtime_conditioning_source", "pending");
+  const originalReferencePath = artifactString(turnArtifacts, "resolved_reference_audio_path", "n/a");
+  const normalizedReferencePath = artifactString(turnArtifacts, "normalized_reference_audio_path", "n/a");
 
   useEffect(() => {
     void fetchStudioOverview()
@@ -78,6 +96,7 @@ export function ASRLive() {
     }
     setTurnBusy(true);
     setTurnError(null);
+    setTurnResult(null);
     try {
       const payload = await generateVoiceTurn({
         transcript_text: finalText.trim(),
@@ -206,12 +225,20 @@ export function ASRLive() {
             <strong>{routing?.model ?? "unconfigured"}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">TTS route</span>
-            <strong>{turnResult?.tts_model_used ?? turnTtsModel}</strong>
+            <span className="label">Requested route</span>
+            <strong>{turnResult?.tts_model_requested ?? turnTtsModel}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">Voice</span>
+            <span className="label">Runtime route</span>
+            <strong>{runtimeRouteUsed}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Requested voice</span>
             <strong>{turnVoices.find((voice) => voice.voice_id === turnVoiceId)?.display_name ?? turnVoiceId}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Runtime voice</span>
+            <strong>{runtimeVoiceLabel}</strong>
           </div>
           <div className="meta-card">
             <span className="label">LLM time</span>
@@ -233,7 +260,7 @@ export function ASRLive() {
           <select value={turnTtsModel} onChange={(event) => setTurnTtsModel(event.target.value as StudioRouteDescriptor["name"])}>
             {turnRoutes.map((route) => (
               <option key={route.name} value={route.name}>
-                {route.label} {route.invokable ? "" : `(${route.status})`}
+                {route.label}
               </option>
             ))}
           </select>
@@ -252,20 +279,25 @@ export function ASRLive() {
           <div className="stack">
             <audio key={turnResult.request_id} controls autoPlay src={turnResult.audio_url} />
             <p className="muted">
-              Reply session <strong>{turnResult.session_id}</strong> used <strong>{turnResult.llm_model_used}</strong> for generation and <strong>{turnResult.tts_model_used}</strong> for synthesis.
+              Reply session <strong>{turnResult.session_id}</strong> used <strong>{turnResult.llm_model_used}</strong> for generation and <strong>{runtimeRouteUsed}</strong> for synthesis.
             </p>
             <details>
               <summary>Runtime truth</summary>
               <div className="key-value-grid">
-                <div className="key-value-row"><span>Requested adapter</span><strong>{String(turnResult.artifacts?.requested_adapter_name ?? "n/a")}</strong></div>
-                <div className="key-value-row"><span>Resolved adapter</span><strong>{String(turnResult.artifacts?.resolved_adapter_name ?? "n/a")}</strong></div>
-                <div className="key-value-row"><span>Resolved host</span><strong>{String(turnResult.artifacts?.resolved_adapter_base_url ?? "n/a")}</strong></div>
-                <div className="key-value-row"><span>Requested voice</span><strong>{String(turnResult.artifacts?.requested_voice_id ?? turnVoiceId)}</strong></div>
-                <div className="key-value-row"><span>Resolved voice</span><strong>{String(turnResult.artifacts?.resolved_voice_asset ?? "n/a")}</strong></div>
-                <div className="key-value-row"><span>Voice runtime target</span><strong>{String(turnResult.artifacts?.resolved_voice_runtime_target ?? "n/a")}</strong></div>
-                <div className="key-value-row"><span>Fallback route</span><strong>{String(turnResult.artifacts?.fallback_route_used ?? "none")}</strong></div>
-                <div className="key-value-row"><span>Fallback reason</span><strong>{String(turnResult.artifacts?.fallback_reason ?? "none")}</strong></div>
-                <div className="key-value-row"><span>Fallback error</span><strong>{String(turnResult.artifacts?.fallback_exception_message ?? "none")}</strong></div>
+                <div className="key-value-row"><span>Requested route</span><strong>{turnResult.tts_model_requested}</strong></div>
+                <div className="key-value-row"><span>Runtime route</span><strong>{runtimeRouteUsed}</strong></div>
+                <div className="key-value-row"><span>Requested adapter</span><strong>{artifactString(turnArtifacts, "requested_adapter_name")}</strong></div>
+                <div className="key-value-row"><span>Resolved adapter</span><strong>{artifactString(turnArtifacts, "resolved_adapter_name")}</strong></div>
+                <div className="key-value-row"><span>Resolved host</span><strong>{artifactString(turnArtifacts, "resolved_adapter_base_url")}</strong></div>
+                <div className="key-value-row"><span>Requested voice</span><strong>{artifactString(turnArtifacts, "requested_voice_id", turnVoiceId)}</strong></div>
+                <div className="key-value-row"><span>Runtime voice</span><strong>{runtimeVoiceLabel}</strong></div>
+                <div className="key-value-row"><span>Voice runtime target</span><strong>{artifactString(turnArtifacts, "resolved_voice_runtime_target")}</strong></div>
+                <div className="key-value-row"><span>Configured ref path</span><strong>{originalReferencePath}</strong></div>
+                <div className="key-value-row"><span>Normalized ref path</span><strong>{normalizedReferencePath}</strong></div>
+                <div className="key-value-row"><span>Conditioning source</span><strong>{runtimeConditioningSource}</strong></div>
+                <div className="key-value-row"><span>Fallback route</span><strong>{artifactString(turnArtifacts, "fallback_route_used", "none")}</strong></div>
+                <div className="key-value-row"><span>Fallback reason</span><strong>{artifactString(turnArtifacts, "fallback_reason", "none")}</strong></div>
+                <div className="key-value-row"><span>Fallback error</span><strong>{artifactString(turnArtifacts, "fallback_exception_message", "none")}</strong></div>
               </div>
             </details>
           </div>

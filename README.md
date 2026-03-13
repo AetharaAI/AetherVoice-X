@@ -115,7 +115,7 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 - You can launch a local Voxtral sidecar with `docker compose --profile voxtral up -d --build voxtral` and then set:
   - `VOXTRAL_REALTIME_BASE_URL=http://voxtral:8000`
   - `VOXTRAL_REALTIME_WS_URL=ws://voxtral:8000`
-- The local Voxtral sidecar uses a dedicated Dockerfile that upgrades to the nightly audio-capable vLLM build, matching the current official guidance for Voxtral Realtime.
+- The local Voxtral sidecar uses a dedicated Dockerfile built from a pinned audio-capable `vllm/vllm-openai` nightly image. Do not layer a floating `pip install vllm...` upgrade on top unless it is intentionally version-matched to that exact base image.
 - OpenMOSS Realtime is not an OpenAI/vLLM realtime websocket. The local `moss` sidecar wraps the official OpenMOSS incremental `push_text -> end_text -> drain` session model and keeps the browser-facing `/v1/tts/stream/*` contract stable.
 - You can launch the local OpenMOSS sidecar with `docker compose --profile moss up -d --build moss`. The TTS service will use `moss_realtime` automatically when `MOSS_REALTIME_BASE_URL` points at that sidecar and fall back to Chatterbox micro-batching when it does not.
 - The public API surface stays stable while model backends evolve behind adapters and routing policy.

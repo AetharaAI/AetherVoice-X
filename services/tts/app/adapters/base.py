@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
 
 from ..schemas.requests import TTSRequest, TTSStreamStartRequest
 from ..schemas.responses import StreamCompletion, StreamSession
+
+
+@dataclass(slots=True)
+class BatchSynthesisResult:
+    audio_bytes: bytes
+    output_format: str
+    model_used: str | None = None
+    timings: dict[str, Any] = field(default_factory=dict)
+    artifacts: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseTTSAdapter(ABC):
@@ -12,7 +23,7 @@ class BaseTTSAdapter(ABC):
     supports_batch: bool
 
     @abstractmethod
-    async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
+    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult | tuple[bytes, str]:
         raise NotImplementedError
 
     @abstractmethod

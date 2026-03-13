@@ -1,8 +1,8 @@
-FROM vllm/vllm-openai:nightly
+FROM vllm/vllm-openai:nightly-36735fd77224467e6580f3bd48eb32d4fca8c72e
 
-RUN python3 -m pip install --no-cache-dir --upgrade --pre "vllm[audio]" \
-    --extra-index-url https://wheels.vllm.ai/nightly \
-    && python3 -m pip install --no-cache-dir soxr librosa soundfile "openai>=1.109.1" \
+# Keep Voxtral on one coherent vLLM/Transformers build. Do not overlay a
+# floating nightly `pip install vllm...` on top of this pinned base image.
+RUN python3 -m pip install --no-cache-dir soxr librosa soundfile "openai==1.109.1" \
     && python3 - <<'PY'
 from pathlib import Path
 

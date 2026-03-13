@@ -8,6 +8,7 @@ import wave
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(client=lambda *args, **kwargs: None))
 
+from services.tts.app.adapters.base import BatchSynthesisResult
 from services.tts.app.adapters.chatterbox import ChatterboxAdapter
 from services.tts.app.schemas.requests import TTSRequest
 from services.tts.app.schemas.responses import TimingBreakdown
@@ -94,6 +95,30 @@ class FakeCapturingChatterboxAdapter:
         return _wav_bytes(), "wav"
 
 
+class FakeOpenMossBatchAdapter:
+    name = "moss_tts"
+    supports_streaming = False
+    supports_batch = True
+    base_url = "http://moss-tts:8022"
+    configured = True
+    ready = True
+
+    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult:
+        return BatchSynthesisResult(
+            audio_bytes=_wav_bytes(),
+            output_format="wav",
+            model_used="moss_tts",
+            timings={"inference_ms": 321, "total_ms": 654},
+            artifacts={
+                "runtime_path_used": "moss_tts",
+                "resolved_conditioning_asset": "/voices/my_ref.wav",
+                "actual_runtime_conditioning_source": "/tmp/tts_reference_my_ref_24000.wav",
+                "original_reference_audio_path": "/voices/my_ref.wav",
+                "normalized_reference_audio_path": "/tmp/tts_reference_my_ref_24000.wav",
+            },
+        )
+
+
 class FakeRegistry:
     def __init__(self, primary, fallback) -> None:
         self.primary = primary
@@ -142,6 +167,40 @@ def test_synthesis_service_uses_chatterbox_safe_voice_on_openmoss_fallback() -> 
     assert result.artifacts["resolved_adapter_name"] == "chatterbox"
     assert result.artifacts["fallback_reason"] == "moss_voice_generator synthesize failed"
     assert result.artifacts["fallback_exception_type"] == "RuntimeError"
+
+
+def test_synthesis_service_preserves_openmoss_runtime_artifacts() -> None:
+    service = SynthesisService(
+        registry=FakeRegistry(FakeOpenMossBatchAdapter(), FakeCapturingChatterboxAdapter()),
+        storage=FakeStorage(),
+        settings=FakeSettings(),
+        studio_service=FakeStudioService(),
+    )
+
+    result, _audio_bytes = asyncio.run(
+        service.synthesize(
+            _request().model_copy(
+                update={
+                    "model": "moss_tts",
+                    "voice": "moss_default",
+                    "metadata": {
+                        "source": "test",
+                        "extra": {
+                            "reference_audio_path": "/voices/my_ref.wav",
+                        },
+                    },
+                }
+            )
+        )
+    )
+
+    assert result.model_used == "moss_tts"
+    assert result.timings.inference_ms == 321
+    assert result.timings.total_ms == 654
+    assert result.artifacts["runtime_path_used"] == "moss_tts"
+    assert result.artifacts["resolved_conditioning_asset"] == "/voices/my_ref.wav"
+    assert result.artifacts["actual_runtime_conditioning_source"] == "/tmp/tts_reference_my_ref_24000.wav"
+    assert result.artifacts["normalized_reference_audio_path"] == "/tmp/tts_reference_my_ref_24000.wav"
 
 
 def test_chatterbox_adapter_defaults_non_chatterbox_registry_voice_ids() -> None:

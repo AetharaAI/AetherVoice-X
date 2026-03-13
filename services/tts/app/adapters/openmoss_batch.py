@@ -5,7 +5,7 @@ import json
 
 import httpx
 
-from .base import BaseTTSAdapter
+from .base import BaseTTSAdapter, BatchSynthesisResult
 from ..schemas.requests import TTSRequest, TTSStreamStartRequest
 from ..schemas.responses import StreamCompletion, StreamSession, TimingBreakdown
 
@@ -71,7 +71,7 @@ class OpenMOSSBatchAdapter(BaseTTSAdapter):
         if self.client is not None:
             await self.client.aclose()
 
-    async def synthesize(self, request: TTSRequest) -> tuple[bytes, str]:
+    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult:
         if not self.base_url or self.client is None:
             raise RuntimeError(f"{self.name} upstream is not configured")
         try:
@@ -96,7 +96,13 @@ class OpenMOSSBatchAdapter(BaseTTSAdapter):
         if not isinstance(audio_b64, str) or not audio_b64:
             raise RuntimeError(f"{self.name} upstream did not return audio")
         self.ready = True
-        return base64.b64decode(audio_b64), str(payload.get("format", request.format))
+        return BatchSynthesisResult(
+            audio_bytes=base64.b64decode(audio_b64),
+            output_format=str(payload.get("format", request.format)),
+            model_used=str(payload.get("model") or self.name),
+            timings=dict(payload.get("timings") or {}),
+            artifacts=dict(payload.get("artifacts") or {}),
+        )
 
     async def start_stream(self, request: TTSStreamStartRequest) -> StreamSession:
         raise NotImplementedError(f"{self.name} does not support streaming")
