@@ -11,12 +11,16 @@ import type { StudioOverview, StudioRouteDescriptor, VoiceTurnResponse } from ".
 
 function preferredTurnRoute(routes: StudioRouteDescriptor[]) {
   return (
+    routes.find((route) => route.name === "kokoro_realtime" && route.invokable)?.name ??
+    routes.find((route) => route.name === "moss_realtime" && route.invokable)?.name ??
     routes.find((route) => route.name === "moss_tts" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
-    routes.find((route) => route.mode === "batch" && route.invokable)?.name ??
+    routes.find((route) => (route.mode === "stream" || route.mode === "batch") && route.invokable)?.name ??
+    routes.find((route) => route.name === "kokoro_realtime")?.name ??
+    routes.find((route) => route.name === "moss_realtime")?.name ??
     routes.find((route) => route.name === "moss_tts")?.name ??
     routes.find((route) => route.name === "chatterbox")?.name ??
-    "moss_tts"
+    "kokoro_realtime"
   );
 }
 
@@ -30,6 +34,14 @@ function artifactString(
     return fallback;
   }
   return String(value);
+}
+
+function artifactNumber(
+  artifacts: Record<string, unknown> | undefined,
+  key: string,
+): number | null {
+  const value = artifacts?.[key];
+  return typeof value === "number" ? value : null;
 }
 
 export function ASRLive() {
@@ -54,14 +66,16 @@ export function ASRLive() {
   const [model, setModel] = useState("auto");
   const [studioOverview, setStudioOverview] = useState<StudioOverview | null>(null);
   const [turnAutoReply, setTurnAutoReply] = useState(false);
-  const [turnVoiceId, setTurnVoiceId] = useState("moss_default");
-  const [turnTtsModel, setTurnTtsModel] = useState<StudioRouteDescriptor["name"]>("moss_tts");
+  const [turnVoiceId, setTurnVoiceId] = useState("af_sky");
+  const [turnTtsModel, setTurnTtsModel] = useState<StudioRouteDescriptor["name"]>("kokoro_realtime");
   const [turnBusy, setTurnBusy] = useState(false);
   const [turnError, setTurnError] = useState<string | null>(null);
   const [turnResult, setTurnResult] = useState<VoiceTurnResponse | null>(null);
   const lastAutoReplySessionRef = useRef<string | null>(null);
   const transcriptChars = (finalText || partialText).length;
-  const turnRoutes = (studioOverview?.routes ?? []).filter((route) => route.mode === "batch" || route.name === "chatterbox");
+  const turnRoutes = (studioOverview?.routes ?? []).filter(
+    (route) => (route.mode === "stream" || route.mode === "batch" || route.name === "chatterbox") && route.invokable,
+  );
   const turnVoices = studioOverview?.voices ?? [];
   const routing = studioOverview?.routing ?? null;
   const turnArtifacts = turnResult?.artifacts;
@@ -70,6 +84,9 @@ export function ASRLive() {
   const runtimeConditioningSource = artifactString(turnArtifacts, "actual_runtime_conditioning_source", "pending");
   const originalReferencePath = artifactString(turnArtifacts, "resolved_reference_audio_path", "n/a");
   const normalizedReferencePath = artifactString(turnArtifacts, "normalized_reference_audio_path", "n/a");
+  const turnMode = artifactString(turnArtifacts, "tts_mode", "batch");
+  const turnFirstChunkMs = artifactNumber(turnArtifacts, "tts_first_chunk_ms");
+  const turnChunkEvents = artifactNumber(turnArtifacts, "tts_chunk_events");
 
   useEffect(() => {
     void fetchStudioOverview()
@@ -204,7 +221,7 @@ export function ASRLive() {
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>
 
-      <Panel title="Turn-based voice reply" eyebrow="ASR -> LLM -> TTS">
+      <Panel title="Live voice reply" eyebrow="ASR -> LLM -> TTS">
         <div className="toolbar">
           <button onClick={() => void runVoiceTurn("manual")} disabled={!finalText.trim() || turnBusy}>
             {turnBusy ? "Generating reply..." : "Reply from final transcript"}
@@ -248,6 +265,14 @@ export function ASRLive() {
             <span className="label">Round trip</span>
             <strong>{formatMs(turnResult?.timings?.total_ms ?? null)}</strong>
           </div>
+          <div className="meta-card">
+            <span className="label">TTS first chunk</span>
+            <strong>{formatMs(turnFirstChunkMs)}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">TTS chunks</span>
+            <strong>{turnChunkEvents ?? "pending"}</strong>
+          </div>
         </div>
         <div className="toolbar">
           <select value={turnVoiceId} onChange={(event) => setTurnVoiceId(event.target.value)}>
@@ -279,7 +304,7 @@ export function ASRLive() {
           <div className="stack">
             <audio key={turnResult.request_id} controls autoPlay src={turnResult.audio_url} />
             <p className="muted">
-              Reply session <strong>{turnResult.session_id}</strong> used <strong>{turnResult.llm_model_used}</strong> for generation and <strong>{runtimeRouteUsed}</strong> for synthesis.
+              Reply session <strong>{turnResult.session_id}</strong> used <strong>{turnResult.llm_model_used}</strong> for generation and <strong>{runtimeRouteUsed}</strong> for {turnMode === "streaming" ? "live-lane synthesis" : "batch synthesis"}.
             </p>
             <details>
               <summary>Runtime truth</summary>
@@ -292,6 +317,9 @@ export function ASRLive() {
                 <div className="key-value-row"><span>Requested voice</span><strong>{artifactString(turnArtifacts, "requested_voice_id", turnVoiceId)}</strong></div>
                 <div className="key-value-row"><span>Runtime voice</span><strong>{runtimeVoiceLabel}</strong></div>
                 <div className="key-value-row"><span>Voice runtime target</span><strong>{artifactString(turnArtifacts, "resolved_voice_runtime_target")}</strong></div>
+                <div className="key-value-row"><span>TTS mode</span><strong>{turnMode}</strong></div>
+                <div className="key-value-row"><span>First chunk</span><strong>{formatMs(turnFirstChunkMs)}</strong></div>
+                <div className="key-value-row"><span>Chunk events</span><strong>{turnChunkEvents ?? "pending"}</strong></div>
                 <div className="key-value-row"><span>Configured ref path</span><strong>{originalReferencePath}</strong></div>
                 <div className="key-value-row"><span>Normalized ref path</span><strong>{normalizedReferencePath}</strong></div>
                 <div className="key-value-row"><span>Conditioning source</span><strong>{runtimeConditioningSource}</strong></div>
@@ -302,7 +330,7 @@ export function ASRLive() {
             </details>
           </div>
         ) : null}
-        <p className="muted">This lane uses the saved provider/model from <code className="inline-code">TTS Studio -&gt; LLM Routing</code>, waits for a final Voxtral transcript, then synthesizes a full batch reply instead of hard realtime audio.</p>
+        <p className="muted">This lane still waits for a finalized Voxtral transcript, then calls the saved provider/model from <code className="inline-code">TTS Studio -&gt; LLM Routing</code>. If you pick a realtime TTS route like Kokoro, the reply now runs through the live synthesis lane instead of being forced through batch.</p>
         {turnError ? <p className="error-text">{turnError}</p> : null}
       </Panel>
     </div>

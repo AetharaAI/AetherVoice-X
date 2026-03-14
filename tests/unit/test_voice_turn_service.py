@@ -32,6 +32,49 @@ class FakeStudioService:
         assert provider == "litellm"
         return (base_url_override or self.routing.base_url or "").rstrip("/"), {"Authorization": "Bearer test"}
 
+    def resolve_voice_metadata(
+        self,
+        tenant_id: str,
+        *,
+        voice_id: str,
+        model: str,
+        metadata: dict,
+        include_audio_bytes: bool,
+    ) -> dict:
+        return {
+            "voice_id": voice_id,
+            "display_name": "Sky",
+            "runtime_target": model,
+            "source_model": model,
+            "include_audio_bytes": include_audio_bytes,
+        }
+
+    def resolve_stream_runtime_truth(
+        self,
+        tenant_id: str,
+        *,
+        requested_route: str,
+        runtime_path_used: str,
+        voice_id: str,
+        metadata: dict,
+        fallback_route_used: str | None,
+    ) -> dict:
+        return {
+            "requested_route": requested_route,
+            "runtime_path_used": runtime_path_used,
+            "live_chunk_source_route": runtime_path_used,
+            "final_artifact_source_route": runtime_path_used,
+            "selected_voice_id": voice_id,
+            "selected_voice_asset": "Sky",
+            "requested_preset": voice_id,
+            "resolved_conditioning_asset": voice_id,
+            "actual_runtime_conditioning_source": voice_id,
+            "conditioning_active": True,
+            "fallback_route_used": fallback_route_used,
+            "fallback_voice_path": None,
+            "notes": [],
+        }
+
 
 class FakeSynthesisService:
     def __init__(self) -> None:
@@ -50,6 +93,66 @@ class FakeSynthesisService:
             ),
             b"RIFFreply",
         )
+
+
+class FakeStorage:
+    def __init__(self) -> None:
+        self.uploads = []
+
+    def upload_bytes(self, bucket: str, key: str, audio_bytes: bytes, content_type: str) -> str:
+        self.uploads.append((bucket, key, audio_bytes, content_type))
+        return f"s3://{bucket}/{key}"
+
+
+class FakeStreamingAdapter:
+    name = "kokoro_realtime"
+    supports_streaming = True
+    supports_batch = False
+    configured = True
+    ready = True
+
+    def __init__(self) -> None:
+        self.started = []
+        self.pushed = []
+        self.completed = []
+        self.ended = []
+
+    async def start_stream(self, request):
+        self.started.append(request)
+        return None
+
+    async def push_text(self, session_id: str, text: str):
+        self.pushed.append((session_id, text))
+        return [{"type": "audio_chunk", "sequence": 1, "metadata": {"source": "push"}}]
+
+    async def complete_text(self, session_id: str):
+        self.completed.append(session_id)
+        return [{"type": "audio_chunk", "sequence": 2, "metadata": {"source": "complete"}}]
+
+    async def end_stream(self, session_id: str):
+        self.ended.append(session_id)
+        return (
+            types.SimpleNamespace(
+                model_used="kokoro_realtime",
+                format="wav",
+                duration_ms=900,
+                timings=TimingBreakdown(inference_ms=180, total_ms=220),
+                artifacts={"selected_voice_id": "af_sky"},
+            ),
+            b"RIFFreply",
+        )
+
+
+class FakeRegistry:
+    def __init__(self, adapter: FakeStreamingAdapter) -> None:
+        self.adapter = adapter
+
+    def get(self, name: str):
+        assert name == "kokoro_realtime"
+        return self.adapter
+
+    def fallback_stream(self):
+        return self.adapter
 
 
 def _request() -> VoiceTurnRequest:
@@ -158,3 +261,53 @@ def test_voice_turn_service_strips_reserved_and_think_tags_before_tts() -> None:
     assert synthesis.requests
     assert synthesis.requests[0].text == "What can I help you with today?"
     assert result.response_text == "What can I help you with today?"
+
+
+def test_voice_turn_service_uses_streaming_lane_for_kokoro() -> None:
+    synthesis = FakeSynthesisService()
+    synthesis.registry = FakeRegistry(FakeStreamingAdapter())
+    synthesis.storage = FakeStorage()
+
+    class FakeSettings:
+        s3_bucket_tts = "voice-tts-output"
+
+    def client_factory(**kwargs):
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl_stream_1",
+                    "model": "qwen3-32b",
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Thank you for calling. This is Monica, how may I assist you today?"
+                            }
+                        }
+                    ],
+                },
+            )
+        )
+        return httpx.AsyncClient(base_url=kwargs["base_url"], transport=transport)
+
+    service = VoiceTurnService(
+        settings=FakeSettings(),
+        studio_service=FakeStudioService(),
+        synthesis_service=synthesis,
+        client_factory=client_factory,
+    )
+
+    request = _request().model_copy(update={"tts_model": "kokoro_realtime", "voice": "af_sky"})
+    result = asyncio.run(service.generate_turn(request))
+
+    adapter = synthesis.registry.adapter
+    assert not synthesis.requests
+    assert adapter.started
+    assert adapter.pushed == [("sess_voice_1", "Thank you for calling. This is Monica, how may I assist you today?")]
+    assert adapter.completed == ["sess_voice_1"]
+    assert adapter.ended == ["sess_voice_1"]
+    assert synthesis.storage.uploads
+    assert result.tts_model_used == "kokoro_realtime"
+    assert result.audio_url.endswith("sess_voice_1/sess_voice_1_final.wav")
+    assert result.artifacts["tts_mode"] == "streaming"
+    assert result.artifacts["tts_chunk_events"] == 2

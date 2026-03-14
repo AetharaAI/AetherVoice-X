@@ -37,7 +37,8 @@ async def voice_turn(
     session_id = prefixed_id("sess_voice")
     settings: Settings = request.app.state.settings
     routing = await tts_client.studio_routing()
-    tts_model = choose_tts_model(payload.tts_model, streaming=False, context_mode="batch", settings=settings)
+    # Voice turns now default to the live TTS lane when the caller leaves the route on auto.
+    tts_model = choose_tts_model(payload.tts_model, streaming=True, context_mode="conversation", settings=settings)
     metadata = payload.metadata.model_dump()
     metadata["tenant_id"] = auth.tenant_id
     extra = dict(metadata.get("extra") or {})

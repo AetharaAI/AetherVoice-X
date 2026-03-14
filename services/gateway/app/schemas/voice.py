@@ -18,7 +18,7 @@ class VoiceTurnTimings(BaseModel):
 class VoiceTurnRequest(BaseModel):
     transcript_text: str
     voice: str = "default"
-    tts_model: str = "moss_tts"
+    tts_model: str = "kokoro_realtime"
     format: str = "wav"
     sample_rate: int = 24000
     style: TTSStyle = Field(default_factory=TTSStyle)

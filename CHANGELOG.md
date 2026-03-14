@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-03-14
+
+- Promoted Kokoro into the current default realtime TTS lane:
+  - added a dedicated `kokoro` sidecar behind `--profile kokoro`
+  - added `kokoro_realtime` behind the existing adapter / registry seam
+  - kept the existing `/v1/tts/stream/*` public contract stable
+  - made `DEFAULT_STREAM_TTS_MODEL=kokoro_realtime`
+- Preserved the heavier TTS lanes instead of tearing them apart:
+  - `moss_realtime` remains available for live experimentation
+  - `moss_tts`, `moss_ttsd`, and `moss_voice_generator` remain part of the studio/runtime catalog
+  - `chatterbox` remains the stable compatibility batch fallback
+- Verified the first operator-successful live Kokoro run through the current browser and gateway flow:
+  - `kokoro_realtime` selected on `TTS Live`
+  - `Sky` preset voice resolved cleanly
+  - chunked audio returned in the browser with low-latency behavior
+  - runtime truth in the UI showed `runtime_path_used=kokoro_realtime`
+  - TTS logs showed successful `start`, `text`, `complete`, and first-chunk events against the Kokoro sidecar
+- Snapshotted the new stable realtime baseline:
+  - Voxtral ASR is now treated as the stable speech-input lane
+  - Kokoro is now treated as the stable speech-output lane
+  - added [REALTIME_STACK_SNAPSHOT_2026-03-14.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/REALTIME_STACK_SNAPSHOT_2026-03-14.md)
+
 ## 2026-03-07
 
 - Stabilized the GPU batch ASR lane:

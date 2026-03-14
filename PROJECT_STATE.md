@@ -2,16 +2,18 @@
 
 ## GPU contract
 
-- Chatterbox TTS is external to this stack and uses host GPU `3` opportunistically during generation.
-- Host GPU `3` is currently treated as the shared studio/design lane for `moss_voice_generator` until Chatterbox is retired.
-- Operational rule for now: do not rely on Chatterbox and `moss_voice_generator` concurrently.
+- Kokoro realtime TTS is pinned to host GPU `3`.
+- Host GPU `3` is now the fast live-agent reply lane for `kokoro`.
+- `moss_voice_generator` still shares host GPU `3` opportunistically for studio/design work.
+- Chatterbox TTS is external to this stack and may also consume host GPU `3` opportunistically during generation.
+- Operational rule for now: do not rely on `kokoro`, `moss_voice_generator`, and Chatterbox concurrently under tight latency or memory expectations.
 - Voxtral Realtime is pinned to host GPU `2`.
 - OpenMOSS realtime is pinned to host GPU `0`.
 - `moss_tts` and `moss_ttsd` remain aligned to host GPU `0` unless explicitly re-planned.
 - ASR stays off host GPU `3`; current pinned expectation is host GPU `1` for the in-stack ASR lane.
 - Inside a container, `cuda:0` is still correct when only one host GPU is exposed through `NVIDIA_VISIBLE_DEVICES`.
-- Current working studio exception: `moss_voice_generator` is stable on host GPU `3` and now boots, warms, and renders successfully through the UI.
-- Long-term target: once OpenMOSS fully replaces Chatterbox, this app owns the full L40S-360 envelope and GPU `3` becomes a first-class unified stack lane.
+- Current working studio exception: `moss_voice_generator` is stable on host GPU `3` and now boots, warms, and renders successfully through the UI when the live Kokoro lane is not being stressed.
+- Long-term target: keep GPU `3` as the first-class low-latency TTS lane while the rest of the voice stack settles around it.
 
 ## Current status
 
@@ -20,9 +22,10 @@
 - Sessions, metrics, and request tracing: working.
 - External model resource visibility: working on the Models page.
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
-- Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
-- Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console and in the operator UI.
+- Voxtral live lane: stable, operator-verified, and actively used from the browser as the default realtime ASR surface.
+- Live ASR observability: improved, and the browser stream is reaching Voxtral with partials and finals visible in both the console and the operator UI.
 - Live TTS backend: sidecar-backed streaming TTS is wired behind the existing `/v1/tts/stream/*` contract. Kokoro is now the preferred fast/default live lane, with OpenMOSS retained for specialized R&D and studio follow-up.
+- Live TTS operator verification: Kokoro succeeded on the first operator run with the `Sky` preset, produced smooth low-latency audio, and completed the full `start -> text -> complete -> final audio` path through the current UI and gateway contract on `2026-03-14`.
 - Live TTS operator console: chunk playback, final WAV playback, explicit download controls, and stream-state feedback are now visible in the browser.
 - TTS Live contract fix: operator-side structured controls no longer need to be prepended into spoken text, and the existing live playback contract remains intact.
 - TTS Live conditioning contract: selected voice reference audio is now forwarded into `moss_realtime` at stream start, with `MOSS_PROMPT_AUDIO_PATH` kept only as the fallback prompt path.
@@ -36,9 +39,10 @@
 
 - Pipeline: `ASR -> LLM -> realtime TTS`
 - Primary product lane for telephony and live agent work.
-- Current state: materially improved and stable enough to freeze.
+- Current state: materially improved and stable enough to freeze at the transport/routing layer.
 - Realtime ASR is strong and should be treated as production-promising infrastructure.
-- Realtime MOSS TTS is now transport-stable and tunable, but speaker identity is still the main blocker.
+- Realtime Kokoro TTS is now the default voice-response lane and has been operator-verified as the first real low-latency voice that feels deployment-worthy.
+- Realtime MOSS TTS remains transport-stable and useful for experimentation, but is no longer the default live reply lane.
 
 ### Lane 2: Turn-Based Voice Mode
 
@@ -59,31 +63,24 @@
 - `faster_whisper`
   - batch ASR: working
   - live ASR fallback: working via micro-batch streaming
+- `voxtral_realtime`
+  - upstream-backed realtime ASR lane is stable enough to freeze
+  - browser, gateway, and upstream websocket contract are all working
+  - operator is actively using this lane for day-to-day speech input
+- `kokoro_realtime`
+  - adapter-driven realtime TTS lane is now the default live reply path
+  - dedicated `kokoro` sidecar is healthy and integrated behind the existing `/v1/tts/stream/*` contract
+  - preset-voice route has been verified in the UI with clean runtime truth and low-latency chunk return
 - `chatterbox`
   - batch TTS: working via HTTP passthrough
   - current fallback lane for batch generation inside the new studio shell: working
 
 ## In-progress lanes
 
-- `voxtral_realtime`
-  - implemented as an upstream-backed adapter
-  - now targets a vLLM realtime websocket upstream when configured
-  - sidecar model load on GPU is verified
-  - realtime websocket handshake is working through the gateway
-  - partial transcripts are visible in the browser
-  - disconnect now finalizes the stream instead of immediately tearing down the browser socket
-  - duplicate cumulative partial rendering has been removed at the UI layer in favor of one evolving transcript card
-  - the last live transcript snapshot now persists across page navigation in the browser session
-  - current polishing target is structured final transcript quality and realtime output normalization
-- `kokoro_realtime`
-  - adapter-driven realtime path is the preferred production telephony lane
-  - dedicated `kokoro` compose sidecar is wired behind `--profile kokoro`
-  - built-in preset voices replace reference-audio conditioning for the fast live lane
-  - current product goal is low-latency live agent replies without disturbing the working Voxtral ASR path
 - `moss_realtime`
   - adapter-driven realtime path implemented
   - dedicated `moss` compose sidecar added behind `--profile moss`
-  - TTS service now prefers true adapter lifecycle over fake chunked batch synth when the sidecar is available
+  - TTS service preserves true adapter lifecycle when this sidecar is selected
   - fallback to chatterbox micro-batching remains in place when the sidecar is unavailable
   - sidecar build, boot, chunk streaming, and final WAV assembly are now working
   - per-session reference audio now overrides the global prompt WAV when the selected voice has a usable registry asset
@@ -128,7 +125,9 @@
 - The file ASR page now supports explicit model selection for comparison runs.
 - The TTS Live page now treats session profile, tone, cadence, style, and latency profile as console-side structured state rather than spoken markup.
 - The TTS Live page now exposes stream-start tuning knobs for immediate realtime quality tests without changing env defaults.
+- The TTS Live page now defaults to `kokoro_realtime` and exposes preset Kokoro voices directly through the shared voice registry.
 - Realtime voice truth has changed: selected voice reference audio should now materially override the global fallback prompt on stream start when that asset exists and can be serialized from the voice registry.
+- Realtime voice truth also now has a second branch: when `runtime_path_used=kokoro_realtime`, preset voice identity is the runtime truth and no reference-audio conditioning is required.
 - Voice Design truth has changed: text-only generated presets are still metadata-only, but a rendered preview saved into the library now becomes a real reusable reference asset for later realtime conditioning.
 - Realtime lane should currently be operated as:
   - start a stream
@@ -148,10 +147,10 @@
 
 ## Immediate next steps
 
-1. Freeze Realtime Agent Mode as a known-good-but-not-final lane and stop reopening solved routing / transport issues.
-2. Move immediately to Turn-Based Voice Mode using realtime ASR as the input source and non-realtime TTS as the output lane.
-3. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the TTS Studio route catalog.
-4. Build the first clean `ASR -> LLM -> turn-based TTS` conversational loop before revisiting deeper realtime changes.
+1. Freeze the current `Voxtral ASR + Kokoro TTS` realtime lane as the new known-good operator baseline.
+2. Write the clean API handoff for external VoiceOps / telephony clients against the existing ASR and TTS public contracts.
+3. Build the first clean `ASR -> LLM -> turn-based TTS` conversational loop before reopening deeper TTS experimentation.
+4. Finish runtime adapters and production verification for `moss_tts` and `moss_ttsd` behind the TTS Studio route catalog.
 5. Validate provider-backed LLM model discovery against real `OpenAI`, `OpenRouter`, and internal `LiteLLM` endpoints.
 6. Run live ASR timing checks from the UI and from `scripts/benchmark_live_asr.py`.
 7. Record timing notes for:
@@ -160,13 +159,14 @@
    - partial event cadence
    - transcript stability under real speech
 8. Improve final transcript shaping for live ASR so the normalized transcript is operator-ready and final flush behavior is consistent.
-9. Evaluate `MOSS-TTSD-v1.0` for studio dialogue generation and keep `moss_realtime` focused on low-latency agent turns only if warm-path latency stays acceptable.
-10. If telephony latency remains too high after shaping fixes, switch the production realtime lane to a smaller model such as Kokoro and keep OpenMOSS in experimental status.
-11. After Turn-Based Voice Mode is solid, revisit realtime identity using clean human reference WAVs rather than synthetic preview assets as the decisive test.
-12. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
+9. Keep `moss_realtime` in experimental status while evaluating whether it belongs in dialogue/studio workflows instead of the default telephony lane.
+10. After Turn-Based Voice Mode is solid, revisit realtime identity using clean human reference WAVs rather than synthetic preview assets as the decisive test for MOSS-family conditioning.
+11. When the unified stack is production-solid, flip the repo private before public cutover to `studio.aetherpro.us`.
 
 ## Snapshot references
 
+- Current stable realtime snapshot:
+  [REALTIME_STACK_SNAPSHOT_2026-03-14.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/REALTIME_STACK_SNAPSHOT_2026-03-14.md)
 - Current OpenMOSS snapshot:
   [OpenMOSS-Realtime-State-Snapshot-2026-03-08.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/OpenMOSS-Realtime-State-Snapshot-2026-03-08.md)
 
