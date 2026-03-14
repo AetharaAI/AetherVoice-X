@@ -5,6 +5,7 @@
 - `faster_whisper`: batch transcription and micro-batch streaming fallback
 - `chatterbox`: HTTP passthrough TTS
 - `voxtral_realtime`: upstream realtime ASR adapter
+- `kokoro_realtime`: Kokoro sidecar-backed fast realtime TTS adapter
 - `moss_realtime`: OpenMOSS sidecar-backed realtime TTS adapter
 - `sentinel_scaffold`: rule-based triage classification
 

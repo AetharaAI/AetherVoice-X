@@ -29,7 +29,7 @@ class TTSStreamStartRequest(BaseModel):
     request_id: str
     session_id: str
     tenant_id: str
-    model: str = "moss_realtime"
+    model: str = "kokoro_realtime"
     voice: str = "default"
     sample_rate: int = 24000
     format: str = "wav"

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 VoiceType = Literal["preset", "cloned", "generated", "imported", "fallback"]
-RouteTarget = Literal["moss_realtime", "moss_tts", "moss_ttsd", "moss_voice_generator", "chatterbox"]
+RouteTarget = Literal["kokoro_realtime", "moss_realtime", "moss_tts", "moss_ttsd", "moss_voice_generator", "chatterbox"]
 ProviderName = Literal["openai", "openrouter", "litellm", "anthropic"]
 
 

@@ -185,7 +185,7 @@ export interface StudioVoice {
   tenant_id?: string | null;
   type: "preset" | "cloned" | "generated" | "imported" | "fallback";
   source_model: string;
-  runtime_target: "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
+  runtime_target: "kokoro_realtime" | "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
   reference_audio_path?: string | null;
   reference_text?: string | null;
   generation_prompt?: string | null;
@@ -197,7 +197,7 @@ export interface StudioVoice {
 }
 
 export interface StudioRouteDescriptor {
-  name: "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
+  name: "kokoro_realtime" | "moss_realtime" | "moss_tts" | "moss_ttsd" | "moss_voice_generator" | "chatterbox";
   label: string;
   mode: "stream" | "batch" | "dialogue" | "voice-design";
   status: "ready" | "staged" | "disabled" | "missing";

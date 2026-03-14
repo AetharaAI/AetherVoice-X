@@ -20,3 +20,8 @@ def test_choose_tts_stream_prefers_stream_model():
     settings = Settings()
     selected = choose_tts_model("auto", streaming=True, context_mode="conversation", settings=settings)
     assert selected == normalize_tts_model_name(settings.default_stream_tts_model)
+
+
+def test_normalize_tts_model_name_maps_kokoro_aliases():
+    assert normalize_tts_model_name("kokoro") == "kokoro_realtime"
+    assert normalize_tts_model_name("kokoro-realtime") == "kokoro_realtime"

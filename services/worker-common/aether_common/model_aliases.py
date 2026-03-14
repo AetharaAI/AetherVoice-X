@@ -15,6 +15,10 @@ ASR_MODEL_ALIASES = {
 
 TTS_MODEL_ALIASES = {
     "chatterbox": "chatterbox",
+    "kokoro_realtime": "kokoro_realtime",
+    "kokoro-realtime": "kokoro_realtime",
+    "kokoro": "kokoro_realtime",
+    "hexgrad/kokoro-82m": "kokoro_realtime",
     "moss_realtime": "moss_realtime",
     "moss-realtime": "moss_realtime",
     "moss-tts-realtime": "moss_realtime",

@@ -120,7 +120,7 @@ class StudioService:
             if not isinstance(entry, dict):
                 continue
             runtime_target = str(entry.get("runtime_target") or "").strip()
-            if runtime_target not in {"moss_realtime", "moss_tts", "moss_ttsd", "moss_voice_generator", "chatterbox"}:
+            if runtime_target not in {"kokoro_realtime", "moss_realtime", "moss_tts", "moss_ttsd", "moss_voice_generator", "chatterbox"}:
                 continue
             default_style = dict(entry.get("default_style") or {})
             demo_text = entry.get("demo_sample_text")
@@ -170,7 +170,96 @@ class StudioService:
         return merged
 
     def _seed_voices(self) -> list[VoiceRecord]:
-        return [
+        voices = [
+            VoiceRecord(
+                voice_id="af_sky",
+                display_name="Sky",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime", "telephony"],
+                notes="Fast Kokoro preset voice for the default live agent lane.",
+            ),
+            VoiceRecord(
+                voice_id="af_bella",
+                display_name="Bella",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="af_heart",
+                display_name="Heart",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="af_nicole",
+                display_name="Nicole",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="af_sarah",
+                display_name="Sarah",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="am_adam",
+                display_name="Adam",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="am_michael",
+                display_name="Michael",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="bf_emma",
+                display_name="Emma",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="bf_isabella",
+                display_name="Isabella",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="bm_george",
+                display_name="George",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="bm_lewis",
+                display_name="Lewis",
+                type="preset",
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro", "preset", "realtime"],
+            ),
             VoiceRecord(
                 voice_id="moss_default",
                 display_name="MOSS Default Voice",
@@ -191,6 +280,7 @@ class StudioService:
                 notes="Existing Chatterbox fallback voice preserved for stable batch output.",
             ),
         ]
+        return voices
 
     def _read_registry(self) -> dict[str, Any]:
         return json.loads(self.registry_path.read_text(encoding="utf-8"))
@@ -241,19 +331,21 @@ class StudioService:
         mode: str,
         leaf: str | None,
         notes: str,
+        model_path: str | None = None,
         fallback_target: str | None = None,
         requires_endpoint: bool = False,
         endpoint: str | None = None,
         runtime_wired: bool = False,
         force_disabled: bool = False,
     ) -> RouteDescriptor:
-        present_on_disk = self._model_exists(leaf) if leaf else False
+        resolved_model_path = Path(model_path) if model_path else (self._canonical_model_path(leaf) if leaf else None)
+        present_on_disk = resolved_model_path.exists() if resolved_model_path else False
         endpoint_ready = self._endpoint_ready(endpoint) if endpoint else False
-        configured = bool(endpoint) if leaf is None else present_on_disk or bool(endpoint)
+        configured = bool(endpoint) if resolved_model_path is None else present_on_disk or bool(endpoint)
         if force_disabled:
-            status = "disabled" if present_on_disk or leaf is not None else "missing"
+            status = "disabled" if present_on_disk or resolved_model_path is not None else "missing"
             invokable = False
-        elif runtime_wired and endpoint_ready and ((present_on_disk or leaf is None) or not requires_endpoint):
+        elif runtime_wired and endpoint_ready and ((present_on_disk or resolved_model_path is None) or not requires_endpoint):
             status = "ready"
             invokable = True
         elif configured:
@@ -267,10 +359,10 @@ class StudioService:
             label=label,
             mode=mode,
             status=status,
-            present_on_disk=present_on_disk if leaf else bool(endpoint),
+            present_on_disk=present_on_disk if resolved_model_path else bool(endpoint),
             runtime_wired=runtime_wired,
             invokable=invokable,
-            model_path=str(self._canonical_model_path(leaf)) if leaf else None,
+            model_path=str(resolved_model_path) if resolved_model_path else None,
             notes=notes,
             fallback_target=fallback_target,
         )
@@ -292,6 +384,18 @@ class StudioService:
 
     def _route_catalog(self) -> list[RouteDescriptor]:
         return [
+            self._route_descriptor(
+                name="kokoro_realtime",
+                label="Kokoro Realtime",
+                mode="stream",
+                leaf=None,
+                model_path=self.settings.kokoro_model_path,
+                requires_endpoint=True,
+                endpoint=self.settings.kokoro_realtime_base_url,
+                runtime_wired=True,
+                notes="Fast preset-voice lane for telephony and live agent replies. This route is the preferred default when the Kokoro sidecar is healthy.",
+                fallback_target="moss_realtime",
+            ),
             self._route_descriptor(
                 name="moss_realtime",
                 label="OpenMOSS Realtime",
@@ -354,12 +458,22 @@ class StudioService:
         selected_voice = (
             VoiceRecord.model_validate(resolved_voice)
             if isinstance(resolved_voice, dict)
-            else voices.get(voice_id) or voices.get("moss_default") or voices.get("chatterbox_default")
+            else voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("moss_default") or voices.get("chatterbox_default")
         )
         realtime_profile = ((metadata.get("extra") or {}).get("realtime_profile") or {}) if isinstance(metadata, dict) else {}
         requested_preset = realtime_profile.get("voice_preset_id") if isinstance(realtime_profile, dict) else None
         notes: list[str] = []
-        if runtime_path_used == "moss_realtime":
+        if runtime_path_used == "kokoro_realtime":
+            if selected_voice is None or selected_voice.runtime_target != "kokoro_realtime":
+                selected_voice = voices.get(self.settings.kokoro_default_voice) or selected_voice
+            conditioning_source = selected_voice.voice_id if selected_voice else self.settings.kokoro_default_voice
+            conditioning_active = True
+            resolved_asset = None
+            fallback_voice_path = self.settings.kokoro_default_voice
+            live_chunk_source_route = "kokoro_realtime.sentence_stream"
+            final_artifact_source_route = "kokoro_realtime.final_concat"
+            notes.append("Kokoro uses built-in preset voices and does not require reference-audio conditioning.")
+        elif runtime_path_used == "moss_realtime":
             selected_asset = str(extra.get("reference_audio_path") or "").strip() if isinstance(extra, dict) else ""
             if not selected_asset and selected_voice and selected_voice.reference_audio_path:
                 selected_asset = selected_voice.reference_audio_path
@@ -498,7 +612,7 @@ class StudioService:
         include_audio_bytes: bool = False,
     ) -> dict[str, Any]:
         voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
-        selected = voices.get(voice_id) or voices.get("moss_default") or voices.get("chatterbox_default")
+        selected = voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("moss_default") or voices.get("chatterbox_default")
         extra = dict(metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
         if selected is None:
             return extra
@@ -506,6 +620,8 @@ class StudioService:
         extra.setdefault("resolved_voice", resolved_voice)
         extra.setdefault("selected_voice_id", selected.voice_id)
         extra.setdefault("selected_voice_asset", selected.display_name)
+        if selected.runtime_target == "kokoro_realtime":
+            extra.setdefault("kokoro_voice_id", selected.voice_id)
         if selected.reference_audio_path:
             extra.setdefault("reference_audio_path", selected.reference_audio_path)
             if include_audio_bytes:

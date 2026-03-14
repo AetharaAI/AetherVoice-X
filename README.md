@@ -105,6 +105,7 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
 - `chatterbox`: implemented as an HTTP passthrough adapter
 - `voxtral_realtime`: implemented against vLLM's `/v1/realtime` websocket when `VOXTRAL_REALTIME_BASE_URL` or `VOXTRAL_REALTIME_WS_URL` is configured
 - `qwen3_asr`: scaffold
+- `kokoro_realtime`: implemented against the local Kokoro sidecar when `KOKORO_REALTIME_BASE_URL` is configured
 - `moss_realtime`: implemented against the local OpenMOSS sidecar when `MOSS_REALTIME_BASE_URL` is configured
 - `sentinel`: rule-based scaffold for domain triage
 - `phi_overlay`: scaffold
@@ -116,6 +117,8 @@ The default local profile uses `AUTH_MODE=optional` so the operator console can 
   - `VOXTRAL_REALTIME_BASE_URL=http://voxtral:8000`
   - `VOXTRAL_REALTIME_WS_URL=ws://voxtral:8000`
 - The local Voxtral sidecar uses a dedicated Dockerfile built from a pinned audio-capable `vllm/vllm-openai` nightly image. Do not layer a floating `pip install vllm...` upgrade on top unless it is intentionally version-matched to that exact base image.
+- Kokoro is the preferred fast TTS lane for live agent replies. The local `kokoro` sidecar wraps the official Kokoro Python runtime behind the existing `/v1/tts/stream/*` contract so VoiceOps and the current frontend do not need a new transport.
 - OpenMOSS Realtime is not an OpenAI/vLLM realtime websocket. The local `moss` sidecar wraps the official OpenMOSS incremental `push_text -> end_text -> drain` session model and keeps the browser-facing `/v1/tts/stream/*` contract stable.
+- You can launch the local Kokoro sidecar with `docker compose --profile kokoro up -d --build kokoro`. The TTS service will prefer `kokoro_realtime` for conversational streaming when that sidecar is healthy.
 - You can launch the local OpenMOSS sidecar with `docker compose --profile moss up -d --build moss`. The TTS service will use `moss_realtime` automatically when `MOSS_REALTIME_BASE_URL` points at that sidecar and fall back to Chatterbox micro-batching when it does not.
 - The public API surface stays stable while model backends evolve behind adapters and routing policy.

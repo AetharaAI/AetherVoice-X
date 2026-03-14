@@ -172,6 +172,45 @@ services:
               device_ids: ["${MOSS_GPU_IDS:-0}"]
               capabilities: [gpu]
 
+  kokoro:
+    build:
+      context: .
+      dockerfile: services/kokoro/Dockerfile
+    profiles:
+      - kokoro
+    runtime: ${KOKORO_CONTAINER_RUNTIME:-nvidia}
+    env_file: .env
+    ipc: host
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      HF_HOME: ${HF_HOME}
+      HUGGINGFACE_HUB_CACHE: ${HUGGINGFACE_HUB_CACHE}
+      TRANSFORMERS_CACHE: ${TRANSFORMERS_CACHE}
+      AETHER_MODEL_ROOT: ${AETHER_MODEL_ROOT}
+      KOKORO_MODEL_ID: ${KOKORO_MODEL_ID:-hexgrad/Kokoro-82M}
+      KOKORO_MODEL_PATH: ${KOKORO_MODEL_PATH:-/models/audio/kokoro}
+      KOKORO_DEFAULT_VOICE: ${KOKORO_DEFAULT_VOICE:-af_sky}
+      KOKORO_DEVICE: ${KOKORO_DEVICE:-cuda:0}
+      KOKORO_SAMPLE_RATE: ${KOKORO_SAMPLE_RATE:-24000}
+      KOKORO_LANG_CODE: ${KOKORO_LANG_CODE:-a}
+      KOKORO_RUNTIME_PORT: ${KOKORO_RUNTIME_PORT:-8026}
+      NVIDIA_VISIBLE_DEVICES: ${KOKORO_GPU_IDS:-3}
+      NVIDIA_DRIVER_CAPABILITIES: ${KOKORO_NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${KOKORO_HOST_PORT:-8018}:${KOKORO_RUNTIME_PORT:-8026}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
+      - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${KOKORO_GPU_IDS:-3}"]
+              capabilities: [gpu]
+
   moss-tts:
     build:
       context: .

@@ -1,0 +1,126 @@
+L4-360 Model Volume Inventory
+=============================
+
+Host
+----
+l4-360-us-west-or-1
+
+Mount
+-----
+/mnt/aetherpro
+
+Top-Level Layout
+----------------
+/mnt/aetherpro
+├── cache/         # general cache area
+├── containers/    # container-related storage
+├── hf-cache/      # Hugging Face cache area
+├── lost+found/    # filesystem recovery dir
+└── models/        # primary model repository
+
+Model Repository
+----------------
+/mnt/aetherpro/models
+├── audio/         # ASR / TTS / audio-gen / music models
+├── cache/         # model-local cache
+├── diffusion/     # diffusion models / staging
+├── embeddings/    # embedding models
+├── llm/           # language / multimodal model families
+├── redwatch/      # reserved / product-specific
+├── redwatchcyankiw/  # RedWatch-specific cyankiwi model area
+├── rerankers/     # reranker models
+├── vision/        # vision-capable models
+└── voice/         # reserved voice model area
+
+Detailed Tree
+-------------
+/mnt/aetherpro/models/audio
+├── .locks/
+├── OpenMOSS-Team/
+│   ├── MOSS-Audio-Tokenizer/
+│   ├── MOSS-SoundEffect/
+│   ├── MOSS-TTS/
+│   ├── MOSS-TTS-Realtime/
+│   ├── MOSS-TTSD-v1.0/
+│   └── MOSS-VoiceGenerator/
+├── Qwen/
+│   └── Qwen3-ASR-1.7B/
+├── Systran/
+│   └── faster-whisper-large-v3/
+├── kokoro/
+│   ├── .cache/
+│   ├── DONATE.md
+│   ├── EVAL.md
+│   ├── README.md
+│   ├── SAMPLES.md
+│   ├── VOICES.md
+│   ├── config.json
+│   ├── eval/
+│   ├── kokoro-v1_0.pth
+│   ├── samples/
+│   └── voices/
+├── mistralai/
+│   └── Voxtral-Mini-4B-Realtime-2602/
+├── models--Systran--faster-whisper-base/
+├── models--Systran--faster-whisper-large-v3/
+├── nvidia/
+│   └── music-flamingo-2601-hf/
+├── personaplex/
+│   ├── .cache/
+│   ├── README.md
+│   ├── bias.md
+│   ├── config.json
+│   ├── dist/
+│   ├── dist.tgz
+│   ├── explainability.md
+│   ├── figures/
+│   ├── model.safetensors
+│   ├── privacy.md
+│   ├── safety.md
+│   ├── tokenizer-e351c8d8-checkpoint125.safetensors
+│   ├── tokenizer_spm_32k_3.model
+│   ├── voices/
+│   └── voices.tgz
+└── whisper/
+    ├── .cache/
+    ├── .locks/
+    ├── README.md
+    ├── config.json
+    ├── model.bin
+    ├── models--Systran--faster-whisper-large-v3/
+    ├── preprocessor_config.json
+    ├── tokenizer.json
+    └── vocabulary.json
+
+/mnt/aetherpro/models/embeddings
+└── bge-m3/
+
+/mnt/aetherpro/models/rerankers
+└── bge-reranker-v2-m3/
+
+/mnt/aetherpro/models/llm
+├── Nanbeige/
+│   └── Nanbeige4.1-3B/
+├── cyankiwi/
+│   └── MiniMax-M2.5-REAP-139B-A10B-AWQ-4bit/
+└── prithivMLmods/
+    └── Qwen3-VL-8B-Instruct-Unredacted-MAX/
+
+/mnt/aetherpro/models/vision
+└── cyankiwi/
+    └── Qwen3.5-35B-A3B-AWQ-4bit/
+
+/mnt/aetherpro/models/redwatchcyankiw
+└── VulnLLM-R-7B-AWQ-8bit/
+
+/mnt/aetherpro/models/voice
+└── [currently empty]
+
+/mnt/aetherpro/models/redwatch
+└── [contents not enumerated in this manual pass]
+
+/mnt/aetherpro/models/cache
+└── [contents not enumerated in this manual pass]
+
+/mnt/aetherpro/models/diffusion
+└── [contents not enumerated in this manual pass]

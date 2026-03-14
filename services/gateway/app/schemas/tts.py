@@ -35,7 +35,7 @@ class TTSResponse(BaseModel):
 
 
 class TTSStreamStartRequest(BaseModel):
-    model: str = "moss_realtime"
+    model: str = "kokoro_realtime"
     voice: str = "default"
     sample_rate: int = 24000
     format: str = "wav"

@@ -12,7 +12,16 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
     return SimpleNamespace(
         local_storage_root=str(tmp_path / "storage"),
         studio_litellm_base_url=None,
+        studio_openai_base_url=None,
+        studio_openai_api_key=None,
+        studio_openrouter_base_url=None,
+        studio_openrouter_api_key=None,
+        studio_litellm_api_key=None,
+        studio_litellm_auth_header="Authorization",
         chatterbox_default_voice="Emily.wav",
+        kokoro_default_voice="af_sky",
+        kokoro_model_path=str(model_root / "audio" / "kokoro"),
+        kokoro_realtime_base_url=None,
         openmoss_model_root=str(model_root / "audio" / "OpenMOSS-Team"),
         host_model_root=str(model_root),
         aether_model_root="/models",
@@ -96,3 +105,26 @@ def test_resolve_voice_metadata_uses_saved_generated_reference_audio(tmp_path: P
     assert extra["selected_voice_asset"] == imported.display_name
     assert extra["reference_audio_path"] == imported.reference_audio_path
     assert extra["generation_prompt"] == "Calm female dispatcher voice."
+
+
+def test_kokoro_route_and_runtime_truth_use_builtin_voice_defaults(tmp_path: Path) -> None:
+    model_root = tmp_path / "models" / "audio" / "kokoro"
+    model_root.mkdir(parents=True)
+    service = StudioService(_settings(tmp_path))
+
+    routes = {route.name: route for route in service.overview("tenant_1").routes}
+    assert "kokoro_realtime" in routes
+    assert routes["kokoro_realtime"].model_path is not None
+
+    runtime = service.resolve_stream_runtime_truth(
+        "tenant_1",
+        requested_route="kokoro_realtime",
+        runtime_path_used="kokoro_realtime",
+        voice_id="af_sky",
+        metadata={"source": "test"},
+        fallback_route_used=None,
+    )
+
+    assert runtime["selected_voice_id"] == "af_sky"
+    assert runtime["actual_runtime_conditioning_source"] == "af_sky"
+    assert runtime["live_chunk_source_route"] == "kokoro_realtime.sentence_stream"

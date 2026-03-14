@@ -3,6 +3,7 @@ from __future__ import annotations
 from aether_common.model_aliases import normalize_tts_model_name
 
 from ..adapters.chatterbox import ChatterboxAdapter
+from ..adapters.kokoro_realtime import KokoroRealtimeAdapter
 from ..adapters.moss_realtime import MossRealtimeAdapter
 from ..adapters.openmoss_batch import OpenMOSSBatchAdapter
 from ..config import get_settings
@@ -15,6 +16,11 @@ class ModelRegistry:
             "chatterbox": ChatterboxAdapter(
                 settings.chatterbox_base_url,
                 default_voice=settings.chatterbox_default_voice,
+            ),
+            "kokoro_realtime": KokoroRealtimeAdapter(
+                base_url=settings.kokoro_realtime_base_url,
+                model_name=settings.kokoro_model_id,
+                timeout_seconds=settings.kokoro_realtime_timeout_seconds,
             ),
             "moss_realtime": MossRealtimeAdapter(
                 base_url=settings.moss_realtime_base_url,
@@ -50,9 +56,10 @@ class ModelRegistry:
         return self.adapters["chatterbox"]
 
     def fallback_stream(self):
-        moss = self.adapters.get("moss_realtime")
-        if moss is not None and (getattr(moss, "ready", False) or getattr(moss, "configured", False)):
-            return moss
+        for name in ("kokoro_realtime", "moss_realtime"):
+            adapter = self.adapters.get(name)
+            if adapter is not None and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False)):
+                return adapter
         return self.adapters["chatterbox"]
 
     def model_info(self) -> list[dict]:
@@ -75,16 +82,20 @@ class ModelRegistry:
                     "features": (
                         ["http_passthrough"]
                         if adapter.name == "chatterbox"
-                        else (["realtime", "adapter_driven_streaming"] if adapter.name == "moss_realtime" else ["openmoss", "batch_http"])
+                        else (
+                            ["realtime", "preset_voices", "adapter_driven_streaming"]
+                            if adapter.name == "kokoro_realtime"
+                            else (["realtime", "adapter_driven_streaming"] if adapter.name == "moss_realtime" else ["openmoss", "batch_http"])
+                        )
                     ),
                     "route_priority": (
-                        10
-                        if adapter.name == "moss_realtime"
-                        else (15 if adapter.name == "moss_tts" else (16 if adapter.name == "moss_ttsd" else (17 if adapter.name == "moss_voice_generator" else 30)))
+                        5
+                        if adapter.name == "kokoro_realtime"
+                        else (10 if adapter.name == "moss_realtime" else (15 if adapter.name == "moss_tts" else (16 if adapter.name == "moss_ttsd" else (17 if adapter.name == "moss_voice_generator" else 30))))
                     ),
                     "memory_footprint": (
                         "external-service"
-                        if adapter.name == "moss_realtime" and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
+                        if adapter.name in {"kokoro_realtime", "moss_realtime"} and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
                         else ("external" if adapter.name == "chatterbox" else "external-service")
                     ),
                 }

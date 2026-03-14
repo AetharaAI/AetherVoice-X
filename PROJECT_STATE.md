@@ -22,7 +22,7 @@
 - Live ASR: frontend, gateway, and internal websocket plumbing are working.
 - Voxtral live lane: first integration pass is now wired behind an env-driven upstream configuration.
 - Live ASR observability: improved, and the browser stream is now reaching Voxtral with partials visible in the console and in the operator UI.
-- Live TTS backend: OpenMOSS sidecar adapter path is now wired behind the existing `/v1/tts/stream/*` contract, with unit coverage for adapter-driven streaming and chatterbox fallback.
+- Live TTS backend: sidecar-backed streaming TTS is wired behind the existing `/v1/tts/stream/*` contract. Kokoro is now the preferred fast/default live lane, with OpenMOSS retained for specialized R&D and studio follow-up.
 - Live TTS operator console: chunk playback, final WAV playback, explicit download controls, and stream-state feedback are now visible in the browser.
 - TTS Live contract fix: operator-side structured controls no longer need to be prepended into spoken text, and the existing live playback contract remains intact.
 - TTS Live conditioning contract: selected voice reference audio is now forwarded into `moss_realtime` at stream start, with `MOSS_PROMPT_AUDIO_PATH` kept only as the fallback prompt path.
@@ -75,6 +75,11 @@
   - duplicate cumulative partial rendering has been removed at the UI layer in favor of one evolving transcript card
   - the last live transcript snapshot now persists across page navigation in the browser session
   - current polishing target is structured final transcript quality and realtime output normalization
+- `kokoro_realtime`
+  - adapter-driven realtime path is the preferred production telephony lane
+  - dedicated `kokoro` compose sidecar is wired behind `--profile kokoro`
+  - built-in preset voices replace reference-audio conditioning for the fast live lane
+  - current product goal is low-latency live agent replies without disturbing the working Voxtral ASR path
 - `moss_realtime`
   - adapter-driven realtime path implemented
   - dedicated `moss` compose sidecar added behind `--profile moss`
@@ -103,7 +108,7 @@
 - `tts_studio`
   - new additive nav item is wired directly under `TTS File`
   - backend voice registry now persists reusable preset, imported, generated, and cloned voice metadata
-  - backend route catalog now advertises `moss_realtime`, `moss_tts`, `moss_ttsd`, `moss_voice_generator`, and `chatterbox`
+  - backend route catalog now advertises `kokoro_realtime`, `moss_realtime`, `moss_tts`, `moss_ttsd`, `moss_voice_generator`, and `chatterbox`
   - provider-backed LLM routing config is now scaffolded for `OpenAI`, `OpenRouter`, `LiteLLM`, with `Anthropic` stubbed
   - provider model dropdowns are fetched live through backend `/models` calls with env-backed auth
   - `moss_voice_generator` is now runtime-backed and verified through curl plus the browser UI

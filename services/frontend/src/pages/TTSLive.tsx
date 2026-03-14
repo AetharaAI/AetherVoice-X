@@ -33,7 +33,7 @@ function statusHeadline(value: string, hasFinalAudio: boolean) {
     return "Generation failed before audio returned";
   }
   if (value === "generating") {
-    return "MOSS Realtime is generating";
+    return "Realtime TTS is generating";
   }
   if (value === "streaming-audio") {
     return "Audio frames are returning";
@@ -52,16 +52,16 @@ function statusHeadline(value: string, hasFinalAudio: boolean) {
 
 function statusMessage(value: string, hasFinalAudio: boolean, sessionId: string | null, lastSentChars: number) {
   if (hasFinalAudio) {
-    return "MOSS Realtime active. Final audio has landed and is ready for playback or download.";
+    return "Realtime TTS active. Final audio has landed and is ready for playback or download.";
   }
   if (value === "generation-error") {
-    return "MOSS Realtime accepted the stream, then the backend generation path failed before a final waveform came back.";
+    return "The realtime TTS lane accepted the stream, then the backend generation path failed before a final waveform came back.";
   }
   if (value === "generating") {
-    return `MOSS Realtime active and generating from the latest ${lastSentChars || 0}-character payload.`;
+    return `Realtime TTS is generating from the latest ${lastSentChars || 0}-character payload.`;
   }
   if (value === "streaming-audio") {
-    return "MOSS Realtime is emitting audio chunks. Stay on the lane until the final frame arrives.";
+    return "Realtime TTS is emitting audio chunks. Stay on the lane until the final frame arrives.";
   }
   if (value === "finalizing") {
     return "Finalizing the session and waiting for the completed audio asset.";
@@ -108,8 +108,8 @@ export function TTSLive() {
   const { connected, connectionLabel, sessionId, wsUrl, modelUsed, runtimeTruth, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop } = useTTSStream();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [voices, setVoices] = useState<StudioVoice[]>([]);
-  const [model, setModel] = useState("moss_realtime");
-  const [voiceId, setVoiceId] = useState("moss_default");
+  const [model, setModel] = useState("kokoro_realtime");
+  const [voiceId, setVoiceId] = useState("af_sky");
   const [sessionProfile, setSessionProfile] = useState("telephony");
   const [tone, setTone] = useState("warm");
   const [cadence, setCadence] = useState("telephony");
@@ -132,26 +132,29 @@ export function TTSLive() {
       [...voices].sort((left, right) => {
         const rank = (voice: StudioVoice) => {
           if (voice.runtime_target === "moss_realtime") {
+            return 1;
+          }
+          if (voice.runtime_target === "kokoro_realtime") {
             return 0;
           }
           if (voice.source_model === "moss_voice_generator") {
-            return 1;
-          }
-          if (voice.runtime_target === "moss_tts" || voice.runtime_target === "moss_ttsd") {
             return 2;
           }
-          if (voice.runtime_target === "chatterbox") {
+          if (voice.runtime_target === "moss_tts" || voice.runtime_target === "moss_ttsd") {
             return 3;
           }
-          return 4;
+          if (voice.runtime_target === "chatterbox") {
+            return 4;
+          }
+          return 5;
         };
         return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
       }),
     [voices]
   );
   const selectedVoice = liveVoices.find((voice) => voice.voice_id === voiceId) ?? liveVoices[0] ?? null;
-  const selectedVoiceAsset = runtimeTruth?.selected_voice_asset ?? selectedVoice?.display_name ?? "MOSS Default Voice";
-  const requestedPreset = runtimeTruth?.requested_preset ?? selectedVoice?.voice_id ?? "moss_default";
+  const selectedVoiceAsset = runtimeTruth?.selected_voice_asset ?? selectedVoice?.display_name ?? "Kokoro Default Voice";
+  const requestedPreset = runtimeTruth?.requested_preset ?? selectedVoice?.voice_id ?? "af_sky";
   const runtimeConditioning = runtimeTruth?.actual_runtime_conditioning_source ?? "pending";
   const fallbackVoicePath = runtimeTruth?.fallback_voice_path ?? "none";
   const runtimePathUsed = runtimeTruth?.runtime_path_used ?? modelUsed ?? model;
@@ -166,7 +169,7 @@ export function TTSLive() {
     connectionLabel === "finalizing";
   const realtimeProfile = useMemo(
     () => ({
-      voice_preset_id: selectedVoice?.voice_id ?? "moss_default",
+      voice_preset_id: selectedVoice?.voice_id ?? "af_sky",
       session_profile: sessionProfile,
       tone,
       cadence,
@@ -277,7 +280,7 @@ export function TTSLive() {
                   </option>
                 ))
               ) : (
-                <option value="moss_realtime">moss_realtime</option>
+                <option value="kokoro_realtime">kokoro_realtime</option>
               )}
             </select>
             <p className="field-hint">Keep this lane on the realtime route for live agent turn-taking. Wider studio workflows belong in TTS Studio.</p>
@@ -288,17 +291,19 @@ export function TTSLive() {
               {liveVoices.length ? (
                 liveVoices.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
-                    {voice.display_name} {voice.runtime_target !== "moss_realtime" ? `(${voice.runtime_target})` : ""}
+                    {voice.display_name} {voice.runtime_target !== "kokoro_realtime" ? `(${voice.runtime_target})` : ""}
                   </option>
                 ))
               ) : (
-                <option value="moss_default">MOSS Default Voice</option>
+                <option value="af_sky">Sky</option>
               )}
             </select>
             <p className="field-hint">
-              {runtimeTruth?.conditioning_active
-                ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
-                : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
+              {runtimePathUsed === "kokoro_realtime"
+                ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
+                : runtimeTruth?.conditioning_active
+                  ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
+                  : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
             </p>
           </div>
           <div className="field-group">
