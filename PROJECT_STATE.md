@@ -26,6 +26,7 @@
 - Live ASR observability: improved, and the browser stream is reaching Voxtral with partials and finals visible in both the console and the operator UI.
 - Live TTS backend: sidecar-backed streaming TTS is wired behind the existing `/v1/tts/stream/*` contract. Kokoro is now the preferred fast/default live lane, with OpenMOSS retained for specialized R&D and studio follow-up.
 - Live TTS operator verification: Kokoro succeeded on the first operator run with the `Sky` preset, produced smooth low-latency audio, and completed the full `start -> text -> complete -> final audio` path through the current UI and gateway contract on `2026-03-14`.
+- VoiceOps handoff: the external ASR + Kokoro + optional `/v1/voice/turn` integration contract is captured in [VOICEOPS_REALTIME_VOICE_API_CONTRACT_2026-03-14.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICEOPS_REALTIME_VOICE_API_CONTRACT_2026-03-14.md).
 - Live TTS operator console: chunk playback, final WAV playback, explicit download controls, and stream-state feedback are now visible in the browser.
 - TTS Live contract fix: operator-side structured controls no longer need to be prepended into spoken text, and the existing live playback contract remains intact.
 - TTS Live conditioning contract: selected voice reference audio is now forwarded into `moss_realtime` at stream start, with `MOSS_PROMPT_AUDIO_PATH` kept only as the fallback prompt path.

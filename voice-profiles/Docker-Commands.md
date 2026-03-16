@@ -102,6 +102,13 @@ docker compose \
 docker compose --profile local-edge up -d --build
 ```
 
+docker compose --profile voxtral --profile kokoro up -d --build tts gateway frontend
+
+# Base stack + Voxtral ASR sidecar + Kokoro sidecar.
+docker compose --profile voxtral --profile kokoro build --no-cache tts gateway frontend
+docker compose --profile voxtral --profile kokoro up -d tts gateway frontend
+
+
 **Start Specific Pieces Only**
 
 ```bash
