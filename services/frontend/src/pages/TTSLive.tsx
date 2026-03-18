@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchStudioVoices } from "../api/studio";
 import { fetchModels } from "../api/sessions";
+import { synthesizeText } from "../api/tts";
 import { Badge } from "../components/common/Badge";
 import { Panel } from "../components/common/Panel";
 import { WaveformPlaceholder } from "../components/tts/WaveformPlaceholder";
 import { useTTSStream } from "../hooks/useTTSStream";
-import type { ModelInfo, StudioVoice } from "../types/api";
+import { formatMs } from "../lib/format";
+import type { ModelInfo, StudioVoice, TTSResponse } from "../types/api";
 
 function formatConnectionLabel(value: string) {
   return value.replace(/-/g, " ");
@@ -19,7 +21,7 @@ function connectionTone(value: string, hasFinalAudio: boolean) {
   if (hasFinalAudio || value === "final") {
     return "good" as const;
   }
-  if (value === "generating" || value === "streaming-audio" || value === "finalizing") {
+  if (value === "generating" || value === "streaming-audio" || value === "finalizing" || value === "batch-generating") {
     return "warn" as const;
   }
   return "default" as const;
@@ -27,10 +29,16 @@ function connectionTone(value: string, hasFinalAudio: boolean) {
 
 function statusHeadline(value: string, hasFinalAudio: boolean) {
   if (hasFinalAudio) {
-    return "Audio ready for review";
+    return value.startsWith("batch") ? "Batch-backed audio ready for review" : "Audio ready for review";
   }
   if (value === "generation-error") {
     return "Generation failed before audio returned";
+  }
+  if (value === "batch-generating") {
+    return "Batch-backed live synthesis is generating";
+  }
+  if (value === "batch-ready") {
+    return "Batch-backed live lane armed";
   }
   if (value === "generating") {
     return "Realtime TTS is generating";
@@ -52,10 +60,18 @@ function statusHeadline(value: string, hasFinalAudio: boolean) {
 
 function statusMessage(value: string, hasFinalAudio: boolean, sessionId: string | null, lastSentChars: number) {
   if (hasFinalAudio) {
-    return "Realtime TTS active. Final audio has landed and is ready for playback or download.";
+    return value.startsWith("batch")
+      ? "Batch-backed live synthesis finished. Final audio is ready for playback or download."
+      : "Realtime TTS active. Final audio has landed and is ready for playback or download.";
   }
   if (value === "generation-error") {
     return "The realtime TTS lane accepted the stream, then the backend generation path failed before a final waveform came back.";
+  }
+  if (value === "batch-generating") {
+    return `Batch-backed live synthesis is generating from the latest ${lastSentChars || 0}-character payload.`;
+  }
+  if (value === "batch-ready") {
+    return `Batch-backed live lane armed for ${sessionId ?? "pending session"}. Each send returns a single finalized waveform so you can compare Qwen voice quality and total latency.`;
   }
   if (value === "generating") {
     return `Realtime TTS is generating from the latest ${lastSentChars || 0}-character payload.`;
@@ -104,8 +120,28 @@ function TypewriterStatus({ text, active }: { text: string; active: boolean }) {
   );
 }
 
+function isBatchBackedLiveModel(entry: ModelInfo) {
+  return entry.kind === "tts" && (entry.supports_streaming || entry.name === "qwen_customvoice");
+}
+
+function sortVoices(left: StudioVoice, right: StudioVoice) {
+  const rank = (voice: StudioVoice) => {
+    if (voice.runtime_target === "kokoro_realtime") {
+      return 0;
+    }
+    if (voice.runtime_target === "qwen_customvoice") {
+      return 1;
+    }
+    if (voice.runtime_target === "chatterbox") {
+      return 2;
+    }
+    return 3;
+  };
+  return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
+}
+
 export function TTSLive() {
-  const { connected, connectionLabel, sessionId, wsUrl, modelUsed, runtimeTruth, chunkCount, lastSentChars, finalUrl, events, error, connect, send, stop } = useTTSStream();
+  const stream = useTTSStream();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [voices, setVoices] = useState<StudioVoice[]>([]);
   const [model, setModel] = useState("kokoro_realtime");
@@ -126,38 +162,30 @@ export function TTSLive() {
   const [repetitionWindow, setRepetitionWindow] = useState(50);
   const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
   const [rawDirectives, setRawDirectives] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
-  const liveModels = models.filter((entry) => entry.kind === "tts" && entry.supports_streaming);
-  const liveVoices = useMemo(
-    () =>
-      [...voices].sort((left, right) => {
-        const rank = (voice: StudioVoice) => {
-          if (voice.runtime_target === "kokoro_realtime") {
-            return 0;
-          }
-          if (voice.runtime_target === "chatterbox") {
-            return 1;
-          }
-          return 2;
-        };
-        return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
-      }),
-    [voices]
-  );
-  const selectedVoice = liveVoices.find((voice) => voice.voice_id === voiceId) ?? liveVoices[0] ?? null;
-  const selectedVoiceAsset = runtimeTruth?.selected_voice_asset ?? selectedVoice?.display_name ?? "Kokoro Default Voice";
-  const requestedPreset = runtimeTruth?.requested_preset ?? selectedVoice?.voice_id ?? "af_sky";
-  const runtimeConditioning = runtimeTruth?.actual_runtime_conditioning_source ?? "pending";
-  const fallbackVoicePath = runtimeTruth?.fallback_voice_path ?? "none";
-  const runtimePathUsed = runtimeTruth?.runtime_path_used ?? modelUsed ?? model;
-  const hasFinalAudio = Boolean(finalUrl);
-  const liveTone = connectionTone(connectionLabel, hasFinalAudio);
-  const busy =
-    connected ||
-    connectionLabel === "starting" ||
-    connectionLabel === "opening-socket" ||
-    connectionLabel === "generating" ||
-    connectionLabel === "streaming-audio" ||
-    connectionLabel === "finalizing";
+  const [batchSessionArmed, setBatchSessionArmed] = useState(false);
+  const [batchConnectionLabel, setBatchConnectionLabel] = useState("idle");
+  const [batchSessionId, setBatchSessionId] = useState<string | null>(null);
+  const [batchResponse, setBatchResponse] = useState<TTSResponse | null>(null);
+  const [batchEvents, setBatchEvents] = useState<string[]>([]);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  const liveModels = useMemo(() => models.filter(isBatchBackedLiveModel), [models]);
+  const selectedModel = useMemo(() => liveModels.find((entry) => entry.name === model) ?? null, [liveModels, model]);
+  const isBatchBackedLive = Boolean(selectedModel && !selectedModel.supports_streaming);
+  const sortedVoices = useMemo(() => [...voices].sort(sortVoices), [voices]);
+  const modelVoices = useMemo(() => {
+    if (model === "qwen_customvoice") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "qwen_customvoice");
+    }
+    if (model === "kokoro_realtime") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "kokoro_realtime");
+    }
+    return sortedVoices;
+  }, [model, sortedVoices]);
+  const selectedVoice = modelVoices.find((voice) => voice.voice_id === voiceId) ?? modelVoices[0] ?? null;
+  const selectedVoiceAsset = selectedVoice?.display_name ?? "Kokoro Default Voice";
+  const requestedPreset = selectedVoice?.voice_id ?? "af_sky";
+
   const realtimeProfile = useMemo(
     () => ({
       voice_preset_id: selectedVoice?.voice_id ?? "af_sky",
@@ -166,7 +194,7 @@ export function TTSLive() {
       cadence,
       speaking_style: speakingStyle,
       latency_mode: latencyMode,
-      raw_directives: rawDirectives
+      raw_directives: rawDirectives,
     }),
     [cadence, latencyMode, rawDirectives, selectedVoice?.voice_id, sessionProfile, speakingStyle, tone]
   );
@@ -179,7 +207,7 @@ export function TTSLive() {
       top_p: topP,
       top_k: topK,
       repetition_penalty: repetitionPenalty,
-      repetition_window: repetitionWindow
+      repetition_window: repetitionWindow,
     }),
     [decodeChunkFrames, decodeOverlapFrames, prefillTextLen, repetitionPenalty, repetitionWindow, temperature, topK, topP]
   );
@@ -200,42 +228,149 @@ export function TTSLive() {
   }, [liveModels, model]);
 
   useEffect(() => {
-    if (liveVoices.length > 0 && !liveVoices.some((voice) => voice.voice_id === voiceId)) {
-      setVoiceId(liveVoices[0].voice_id);
+    if (modelVoices.length > 0 && !modelVoices.some((voice) => voice.voice_id === voiceId)) {
+      setVoiceId(modelVoices[0].voice_id);
     }
-  }, [liveVoices, voiceId]);
+  }, [modelVoices, voiceId]);
+
+  function appendBatchEvent(message: string) {
+    setBatchEvents((current) => [...current.slice(-11), message]);
+  }
+
+  function resetBatchState() {
+    setBatchSessionArmed(false);
+    setBatchConnectionLabel("idle");
+    setBatchSessionId(null);
+    setBatchResponse(null);
+    setBatchEvents([]);
+    setBatchError(null);
+  }
+
+  async function handleStart() {
+    if (!isBatchBackedLive) {
+      await stream.connect({
+        model,
+        voice: selectedVoice?.voice_id ?? "default",
+        sampleRate,
+        format: "wav",
+        contextMode: "conversation",
+        metadata: {
+          source: "console",
+          extra: {
+            lane: "tts_live",
+            realtime_profile: realtimeProfile,
+            realtime_tuning: realtimeTuning,
+          },
+        },
+      });
+      return;
+    }
+    const session = `sess_tts_live_batch_${Date.now().toString(36)}`;
+    setBatchSessionArmed(true);
+    setBatchConnectionLabel("batch-ready");
+    setBatchSessionId(session);
+    setBatchResponse(null);
+    setBatchEvents([`batch lane armed · ${session}`, `route selected · ${model}`, `voice selected · ${selectedVoice?.display_name ?? voiceId}`]);
+    setBatchError(null);
+  }
+
+  async function handleSend() {
+    if (!isBatchBackedLive) {
+      await stream.send(bodyText.trim());
+      return;
+    }
+    if (!batchSessionArmed) {
+      setBatchError("Batch-backed live lane is not armed.");
+      return;
+    }
+    if (!bodyText.trim()) {
+      setBatchError("Nothing to send.");
+      return;
+    }
+    try {
+      setBatchError(null);
+      setBatchResponse(null);
+      setBatchConnectionLabel("batch-generating");
+      appendBatchEvent(`batch request started · ${bodyText.trim().length} chars`);
+      const response = await synthesizeText({
+        model,
+        voice: selectedVoice?.voice_id ?? voiceId,
+        text: bodyText.trim(),
+        format: "wav",
+        sample_rate: sampleRate,
+        stream: false,
+        style: {
+          emotion: tone === "neutral" ? "neutral" : tone,
+          speed: 1,
+          speaker_hint: selectedVoice?.display_name ?? undefined,
+        },
+        metadata: {
+          source: "console",
+          lane: "tts_live_batch_probe",
+          extra: {
+            realtime_profile: realtimeProfile,
+            realtime_tuning: realtimeTuning,
+            live_mode: "batch_backed",
+            qwen_instructions: rawDirectives.trim() || undefined,
+          },
+        },
+      });
+      setBatchResponse(response);
+      setBatchSessionId(response.session_id);
+      setBatchConnectionLabel("batch-ready");
+      appendBatchEvent(`batch audio ready · ${response.audio_url}`);
+      appendBatchEvent(`total latency · ${formatMs(response.timings.total_ms)}`);
+      appendBatchEvent(`inference latency · ${formatMs(response.timings.inference_ms)}`);
+    } catch (err) {
+      setBatchError((err as Error).message);
+      setBatchConnectionLabel("generation-error");
+      appendBatchEvent(`batch generation failed · ${(err as Error).message}`);
+    }
+  }
+
+  function handleStop() {
+    if (!isBatchBackedLive) {
+      stream.stop();
+      return;
+    }
+    resetBatchState();
+  }
+
+  const sessionOpen = isBatchBackedLive ? batchSessionArmed : stream.connected;
+  const connectionLabel = isBatchBackedLive ? batchConnectionLabel : stream.connectionLabel;
+  const sessionId = isBatchBackedLive ? batchSessionId : stream.sessionId;
+  const modelUsed = isBatchBackedLive ? batchResponse?.model_used ?? selectedModel?.name ?? model : stream.modelUsed;
+  const runtimeTruth = isBatchBackedLive ? null : stream.runtimeTruth;
+  const chunkCount = isBatchBackedLive ? 0 : stream.chunkCount;
+  const lastSentChars = isBatchBackedLive ? bodyText.trim().length : stream.lastSentChars;
+  const finalUrl = isBatchBackedLive ? batchResponse?.audio_url ?? null : stream.finalUrl;
+  const events = isBatchBackedLive ? batchEvents : stream.events;
+  const error = isBatchBackedLive ? batchError : stream.error;
+  const wsUrl = isBatchBackedLive ? null : stream.wsUrl;
+  const hasFinalAudio = Boolean(finalUrl);
+  const liveTone = connectionTone(connectionLabel, hasFinalAudio);
+  const busy = ["starting", "opening-socket", "generating", "streaming-audio", "finalizing", "batch-generating"].includes(connectionLabel);
+  const runtimeConditioning = isBatchBackedLive
+    ? "provider_batch_live_probe"
+    : runtimeTruth?.actual_runtime_conditioning_source ?? "pending";
+  const fallbackVoicePath = isBatchBackedLive ? "none" : runtimeTruth?.fallback_voice_path ?? "none";
+  const runtimePathUsed = isBatchBackedLive ? modelUsed ?? model : runtimeTruth?.runtime_path_used ?? modelUsed ?? model;
+  const outputHint = isBatchBackedLive
+    ? "This lane is batch-backed for Qwen evaluation. Each send returns one finalized WAV so you can judge voice quality and total latency without claiming realtime chunks."
+    : "The finalized WAV appears here after you click End stream. Live audio chunks can still play before that, but the downloadable file is assembled at stream close.";
 
   return (
     <div className="page-grid">
       <Panel title="Realtime synthesis lane" eyebrow="TTS Live">
         <div className="toolbar">
-          <button
-            onClick={() =>
-              connect({
-                model,
-                voice: selectedVoice?.voice_id ?? "default",
-                sampleRate,
-                format: "wav",
-                contextMode: "conversation",
-                metadata: {
-                  source: "console",
-                  extra: {
-                    lane: "tts_live",
-                    realtime_profile: realtimeProfile,
-                    realtime_tuning: realtimeTuning
-                  }
-                }
-              })
-            }
-            disabled={connected}
-          >
-            Start stream
+          <button onClick={handleStart} disabled={sessionOpen}>
+            {isBatchBackedLive ? (batchSessionArmed ? "Batch lane armed" : "Arm batch lane") : "Start stream"}
           </button>
-          <button onClick={() => send(bodyText.trim())} disabled={!connected || !bodyText.trim()}>
-            Send text
+          <button onClick={handleSend} disabled={!sessionOpen || !bodyText.trim()}>
+            {isBatchBackedLive ? "Generate audio" : "Send text"}
           </button>
-          <button onClick={stop} disabled={!connected} className="secondary">
-            End stream
+          <button onClick={handleStop} disabled={!sessionOpen} className="secondary">
+            {isBatchBackedLive ? "Reset lane" : "End stream"}
           </button>
           <Badge value={formatConnectionLabel(connectionLabel)} tone={liveTone} />
         </div>
@@ -252,7 +387,7 @@ export function TTSLive() {
             </div>
             <div className="status-chip">
               <span className="label">Chunks</span>
-              <strong>{chunkCount}</strong>
+              <strong>{chunkCount || (isBatchBackedLive && hasFinalAudio ? 1 : 0)}</strong>
             </div>
             <div className="status-chip">
               <span className="label">Audio</span>
@@ -262,27 +397,31 @@ export function TTSLive() {
         </section>
         <div className="control-grid">
           <div className="field-group">
-            <label htmlFor="tts-live-model">Realtime model</label>
-            <select id="tts-live-model" value={model} onChange={(event) => setModel(event.target.value)} disabled={connected}>
+            <label htmlFor="tts-live-model">Synthesis model</label>
+            <select id="tts-live-model" value={model} onChange={(event) => setModel(event.target.value)} disabled={sessionOpen}>
               {liveModels.length ? (
                 liveModels.map((entry) => (
                   <option key={entry.name} value={entry.name}>
-                    {entry.name}
+                    {entry.name} {entry.supports_streaming ? "(streaming)" : "(batch-backed live)"}
                   </option>
                 ))
               ) : (
                 <option value="kokoro_realtime">kokoro_realtime</option>
               )}
             </select>
-            <p className="field-hint">Keep this lane on the realtime route for live agent turn-taking. Wider studio workflows belong in TTS Studio.</p>
+            <p className="field-hint">
+              {isBatchBackedLive
+                ? "Qwen is exposed here as a batch-backed live probe so you can judge voices and total latency on the operator lane without pretending it is websocket-streaming."
+                : "Keep this lane on the realtime route for live agent turn-taking. Wider studio workflows belong in TTS Studio."}
+            </p>
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-voice">Voice preset</label>
-            <select id="tts-live-voice" value={selectedVoice?.voice_id ?? voiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={connected}>
-              {liveVoices.length ? (
-                liveVoices.map((voice) => (
+            <select id="tts-live-voice" value={selectedVoice?.voice_id ?? voiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={sessionOpen}>
+              {modelVoices.length ? (
+                modelVoices.map((voice) => (
                   <option key={voice.voice_id} value={voice.voice_id}>
-                    {voice.display_name} {voice.runtime_target !== "kokoro_realtime" ? `(${voice.runtime_target})` : ""}
+                    {voice.display_name} {voice.runtime_target !== model ? `(${voice.runtime_target})` : ""}
                   </option>
                 ))
               ) : (
@@ -290,25 +429,27 @@ export function TTSLive() {
               )}
             </select>
             <p className="field-hint">
-              {runtimePathUsed === "kokoro_realtime"
-                ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
-                : runtimeTruth?.conditioning_active
-                  ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
-                  : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
+              {isBatchBackedLive
+                ? "Qwen voices here are the seeded built-in CustomVoice presets. Use this lane to compare voice quality and total generation time before moving into telephony harness tests."
+                : runtimePathUsed === "kokoro_realtime"
+                  ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
+                  : runtimeTruth?.conditioning_active
+                    ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
+                    : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
             </p>
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-sample-rate">Sample rate</label>
-            <select id="tts-live-sample-rate" value={sampleRate} onChange={(event) => setSampleRate(Number(event.target.value))} disabled={connected}>
+            <select id="tts-live-sample-rate" value={sampleRate} onChange={(event) => setSampleRate(Number(event.target.value))} disabled={sessionOpen}>
               <option value={24000}>24000 Hz</option>
             </select>
-            <p className="field-hint">Realtime stays pinned to the model-native sample rate for now.</p>
+            <p className="field-hint">Live testing stays pinned to the model-native sample rate for now.</p>
           </div>
         </div>
         <div className="control-grid">
           <div className="field-group">
             <label htmlFor="tts-live-profile">Session profile</label>
-            <select id="tts-live-profile" value={sessionProfile} onChange={(event) => setSessionProfile(event.target.value)} disabled={connected}>
+            <select id="tts-live-profile" value={sessionProfile} onChange={(event) => setSessionProfile(event.target.value)} disabled={sessionOpen}>
               <option value="telephony">Telephony</option>
               <option value="assistant">Assistant</option>
               <option value="narration">Narration</option>
@@ -316,7 +457,7 @@ export function TTSLive() {
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-tone">Tone</label>
-            <select id="tts-live-tone" value={tone} onChange={(event) => setTone(event.target.value)} disabled={connected}>
+            <select id="tts-live-tone" value={tone} onChange={(event) => setTone(event.target.value)} disabled={sessionOpen}>
               <option value="warm">warm</option>
               <option value="calm">calm</option>
               <option value="neutral">neutral</option>
@@ -325,7 +466,7 @@ export function TTSLive() {
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-cadence">Cadence</label>
-            <select id="tts-live-cadence" value={cadence} onChange={(event) => setCadence(event.target.value)} disabled={connected}>
+            <select id="tts-live-cadence" value={cadence} onChange={(event) => setCadence(event.target.value)} disabled={sessionOpen}>
               <option value="telephony">telephony</option>
               <option value="conversational">conversational</option>
               <option value="measured">measured</option>
@@ -333,7 +474,7 @@ export function TTSLive() {
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-style">Speaking style</label>
-            <select id="tts-live-style" value={speakingStyle} onChange={(event) => setSpeakingStyle(event.target.value)} disabled={connected}>
+            <select id="tts-live-style" value={speakingStyle} onChange={(event) => setSpeakingStyle(event.target.value)} disabled={sessionOpen}>
               <option value="service">service</option>
               <option value="dispatcher">dispatcher</option>
               <option value="support">support</option>
@@ -342,7 +483,7 @@ export function TTSLive() {
           </div>
           <div className="field-group">
             <label htmlFor="tts-live-latency">Latency profile</label>
-            <select id="tts-live-latency" value={latencyMode} onChange={(event) => setLatencyMode(event.target.value)} disabled={connected}>
+            <select id="tts-live-latency" value={latencyMode} onChange={(event) => setLatencyMode(event.target.value)} disabled={sessionOpen}>
               <option value="low_latency">low latency</option>
               <option value="balanced">balanced</option>
               <option value="quality">quality</option>
@@ -355,108 +496,41 @@ export function TTSLive() {
             <div className="control-grid">
               <div className="field-group">
                 <label htmlFor="tts-live-prefill">Prefill text len</label>
-                <input
-                  id="tts-live-prefill"
-                  type="number"
-                  min={1}
-                  max={64}
-                  value={prefillTextLen}
-                  onChange={(event) => setPrefillTextLen(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-prefill" type="number" min={1} max={64} value={prefillTextLen} onChange={(event) => setPrefillTextLen(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-chunk-frames">Decode chunk frames</label>
-                <input
-                  id="tts-live-chunk-frames"
-                  type="number"
-                  min={1}
-                  max={64}
-                  value={decodeChunkFrames}
-                  onChange={(event) => setDecodeChunkFrames(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-chunk-frames" type="number" min={1} max={64} value={decodeChunkFrames} onChange={(event) => setDecodeChunkFrames(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-overlap-frames">Decode overlap frames</label>
-                <input
-                  id="tts-live-overlap-frames"
-                  type="number"
-                  min={0}
-                  max={16}
-                  value={decodeOverlapFrames}
-                  onChange={(event) => setDecodeOverlapFrames(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-overlap-frames" type="number" min={0} max={16} value={decodeOverlapFrames} onChange={(event) => setDecodeOverlapFrames(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-temperature">Temperature</label>
-                <input
-                  id="tts-live-temperature"
-                  type="number"
-                  min={0.1}
-                  max={2}
-                  step={0.05}
-                  value={temperature}
-                  onChange={(event) => setTemperature(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-temperature" type="number" min={0.1} max={2} step={0.05} value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-top-p">Top p</label>
-                <input
-                  id="tts-live-top-p"
-                  type="number"
-                  min={0.05}
-                  max={1}
-                  step={0.05}
-                  value={topP}
-                  onChange={(event) => setTopP(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-top-p" type="number" min={0.05} max={1} step={0.05} value={topP} onChange={(event) => setTopP(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-top-k">Top k</label>
-                <input
-                  id="tts-live-top-k"
-                  type="number"
-                  min={1}
-                  max={200}
-                  step={1}
-                  value={topK}
-                  onChange={(event) => setTopK(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-top-k" type="number" min={1} max={200} step={1} value={topK} onChange={(event) => setTopK(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-repetition-penalty">Repetition penalty</label>
-                <input
-                  id="tts-live-repetition-penalty"
-                  type="number"
-                  min={0.8}
-                  max={2}
-                  step={0.05}
-                  value={repetitionPenalty}
-                  onChange={(event) => setRepetitionPenalty(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-repetition-penalty" type="number" min={0.8} max={2} step={0.05} value={repetitionPenalty} onChange={(event) => setRepetitionPenalty(Number(event.target.value))} disabled={sessionOpen} />
               </div>
               <div className="field-group">
                 <label htmlFor="tts-live-repetition-window">Repetition window</label>
-                <input
-                  id="tts-live-repetition-window"
-                  type="number"
-                  min={1}
-                  max={512}
-                  step={1}
-                  value={repetitionWindow}
-                  onChange={(event) => setRepetitionWindow(Number(event.target.value))}
-                  disabled={connected}
-                />
+                <input id="tts-live-repetition-window" type="number" min={1} max={512} step={1} value={repetitionWindow} onChange={(event) => setRepetitionWindow(Number(event.target.value))} disabled={sessionOpen} />
               </div>
             </div>
             <p className="field-hint">
-              These controls apply at stream start for the current session only. Use them for immediate live quality tests without changing backend env defaults.
+              {isBatchBackedLive
+                ? "These controls are preserved in metadata for the Qwen provider. This lane is for latency and voice evaluation, not true chunked streaming yet."
+                : "These controls apply at stream start for the current session only. Use them for immediate live quality tests without changing backend env defaults."}
             </p>
           </div>
         </details>
@@ -490,21 +564,15 @@ export function TTSLive() {
             <strong>{runtimePathUsed}</strong>
           </div>
           <div className="meta-card">
-            <span className="label">WebSocket contract</span>
-            <strong className="meta-value-wrap">{wsUrl ?? "pending"}</strong>
+            <span className="label">Delivery contract</span>
+            <strong className="meta-value-wrap">{isBatchBackedLive ? `batch-backed via /v1/tts/synthesize · ${formatMs(batchResponse?.timings?.total_ms)}` : wsUrl ?? "pending"}</strong>
           </div>
         </div>
         <div className="control-grid">
           <div className="field-group">
             <label htmlFor="tts-live-body">Spoken body</label>
-            <textarea
-              id="tts-live-body"
-              value={bodyText}
-              onChange={(event) => setBodyText(event.target.value)}
-              rows={5}
-              placeholder="Write the response your agent should say."
-            />
-            <p className="field-hint">Only the spoken body is sent into the realtime utterance. Session profile and style controls ride in backend state.</p>
+            <textarea id="tts-live-body" value={bodyText} onChange={(event) => setBodyText(event.target.value)} rows={5} placeholder="Write the response your agent should say." />
+            <p className="field-hint">Only the spoken body is sent into the live utterance. Session profile and style controls ride in backend state.</p>
           </div>
           <details className="accordion">
             <summary>Experimental raw directives</summary>
@@ -527,10 +595,7 @@ export function TTSLive() {
             <div>
               <p className="eyebrow">Output surface</p>
               <h3>Operator playback and transport artifacts</h3>
-              <p className="field-hint">
-                The finalized WAV appears here after you click <strong>End stream</strong>. Live audio chunks can still play before that, but the
-                downloadable file is assembled at stream close.
-              </p>
+              <p className="field-hint">{outputHint}</p>
             </div>
             <div className="stream-output-actions">
               {finalUrl ? (
@@ -569,7 +634,11 @@ export function TTSLive() {
             ))}
           </div>
         </section>
-        <p className="muted">Primary use case: keep the stream open, bind a voice preset to the session, and push plain assistant text from your reasoning layer with minimal operator ceremony.</p>
+        <p className="muted">
+          {isBatchBackedLive
+            ? "Primary use case: compare Qwen voices, artifacts, and total latency on the operator surface before deciding whether the model is good enough to promote into a deeper telephony harness."
+            : "Primary use case: keep the stream open, bind a voice preset to the session, and push plain assistant text from your reasoning layer with minimal operator ceremony."}
+        </p>
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>
     </div>
