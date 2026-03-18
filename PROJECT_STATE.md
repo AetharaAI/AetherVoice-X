@@ -1,5 +1,16 @@
 # Project State
 
+## 2026-03-18 Control Truth
+
+- `OpenMOSS` has been decommissioned from the normal compose boot path on `qwentest`.
+- The control reboot passed with no MOSS containers and no MOSS GPU residency in the active stack.
+- `Voxtral Realtime` remains pinned to host GPU `2`.
+- `Kokoro Realtime` remains pinned to host GPU `3`.
+- The frozen realtime lane remains `Voxtral ASR + Kokoro TTS`.
+- The next integration target is `Qwen3-TTS-12Hz-1.7B-CustomVoice` as the first Qwen family lane.
+
+This section is the current operational truth and takes precedence over older MOSS-era notes below until the rest of this document is fully rewritten.
+
 ## GPU contract
 
 - Kokoro realtime TTS is pinned to host GPU `3`.

@@ -142,3 +142,19 @@ The target is:
 This document is the planning anchor for the `qwentest` branch.
 
 If runtime truth changes during this branch, update this document so the branch history stays understandable and the transition from `OpenMOSS` to `Qwen-TTS` remains explicit and auditable.
+
+## Status Update - 2026-03-18
+
+The pre-Qwen control checkpoint has now been satisfied on the VM:
+
+- no active MOSS containers in the normal stack
+- no active MOSS GPU residency in the control boot
+- `Voxtral` verified on host GPU `2`
+- `Kokoro` verified on host GPU `3`
+- gateway, ASR, and TTS health checks clean
+
+The next branch objective is now:
+
+- first-pass integration of `Qwen3-TTS-12Hz-1.7B-CustomVoice`
+
+See [QWEN_PHASE1_CUSTOMVOICE_PLAN_2026-03-18.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/QWEN_PHASE1_CUSTOMVOICE_PLAN_2026-03-18.md) for the next planning anchor.
