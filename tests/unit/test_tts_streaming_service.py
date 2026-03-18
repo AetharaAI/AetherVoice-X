@@ -75,8 +75,8 @@ class FakeSynthesisService:
         )
 
 
-class FakeMossAdapter:
-    name = "moss_realtime"
+class FakeKokoroAdapter:
+    name = "kokoro_realtime"
     supports_streaming = True
     supports_batch = False
     configured = True
@@ -140,7 +140,6 @@ class FakeRegistry:
 
 class FakeSettings:
     s3_bucket_tts = "voice-tts-output"
-    moss_prompt_audio_path = None
 
 
 class FakeStudioService:
@@ -158,8 +157,6 @@ class FakeStudioService:
                 "reference_audio_path": "/tmp/reference.wav",
             }
         )
-        if include_audio_bytes:
-            extra["reference_audio_b64"] = "dGVzdA=="
         return extra
 
     def resolve_stream_runtime_truth(self, tenant_id: str, *, requested_route: str, runtime_path_used: str, voice_id: str, metadata: dict, fallback_route_used: str | None) -> dict:
@@ -180,7 +177,7 @@ class FakeStudioService:
         }
 
 
-def _request(model: str = "moss_realtime") -> TTSStreamStartRequest:
+def _request(model: str = "kokoro_realtime") -> TTSStreamStartRequest:
     return TTSStreamStartRequest(
         request_id="req_1",
         session_id="sess_1",
@@ -194,8 +191,8 @@ def _request(model: str = "moss_realtime") -> TTSStreamStartRequest:
     )
 
 
-def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
-    adapter = FakeMossAdapter()
+def test_streaming_service_uses_adapter_driven_streaming_for_kokoro() -> None:
+    adapter = FakeKokoroAdapter()
     service = StreamingService(
         registry=FakeRegistry(adapter, FakeChatterboxAdapter()),
         synthesis_service=FakeSynthesisService(),
@@ -210,16 +207,15 @@ def test_streaming_service_uses_adapter_driven_streaming_for_moss() -> None:
     events = asyncio.run(service.push("sess_1", "Hello from MOSS."))
     result, audio_bytes = asyncio.run(service.finish("sess_1"))
 
-    assert start["model"] == "moss_realtime"
-    assert start["runtime"]["runtime_path_used"] == "moss_realtime"
+    assert start["model"] == "kokoro_realtime"
+    assert start["runtime"]["runtime_path_used"] == "kokoro_realtime"
     assert adapter.start_request is not None
     assert adapter.start_request.metadata["extra"]["reference_audio_path"] == "/tmp/reference.wav"
-    assert adapter.start_request.metadata["extra"]["reference_audio_b64"] == "dGVzdA=="
     assert events and events[0]["type"] == "audio_chunk"
-    assert events[0]["metadata"]["runtime"]["live_chunk_source_route"] == "moss_realtime.live"
-    assert result.model_used == "moss_realtime"
+    assert events[0]["metadata"]["runtime"]["live_chunk_source_route"] == "kokoro_realtime.live"
+    assert result.model_used == "kokoro_realtime"
     assert result.audio_url.startswith("s3://voice-tts-output/tts/tenant_1/sess_1/")
-    assert result.artifacts["runtime"]["final_artifact_source_route"] == "moss_realtime.final"
+    assert result.artifacts["runtime"]["final_artifact_source_route"] == "kokoro_realtime.final"
     assert audio_bytes.startswith(b"RIFF")
 
 
@@ -236,7 +232,7 @@ def test_streaming_service_falls_back_to_microbatch_when_streaming_adapter_is_un
         studio_service=FakeStudioService(),
     )
 
-    start = asyncio.run(service.start(_request(model="moss_realtime")))
+    start = asyncio.run(service.start(_request(model="kokoro_realtime")))
     events = asyncio.run(service.push("sess_1", "fallback chunk"))
     result, audio_bytes = asyncio.run(service.finish("sess_1"))
 

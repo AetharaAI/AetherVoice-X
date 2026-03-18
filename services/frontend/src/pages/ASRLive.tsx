@@ -12,13 +12,9 @@ import type { StudioOverview, StudioRouteDescriptor, VoiceTurnResponse } from ".
 function preferredTurnRoute(routes: StudioRouteDescriptor[]) {
   return (
     routes.find((route) => route.name === "kokoro_realtime" && route.invokable)?.name ??
-    routes.find((route) => route.name === "moss_realtime" && route.invokable)?.name ??
-    routes.find((route) => route.name === "moss_tts" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => (route.mode === "stream" || route.mode === "batch") && route.invokable)?.name ??
     routes.find((route) => route.name === "kokoro_realtime")?.name ??
-    routes.find((route) => route.name === "moss_realtime")?.name ??
-    routes.find((route) => route.name === "moss_tts")?.name ??
     routes.find((route) => route.name === "chatterbox")?.name ??
     "kokoro_realtime"
   );
@@ -95,7 +91,7 @@ export function ASRLive() {
         setTurnVoiceId((current) => (
           overview.voices.some((voice) => voice.voice_id === current)
             ? current
-            : (overview.voices[0]?.voice_id ?? "moss_default")
+            : (overview.voices[0]?.voice_id ?? "af_sky")
         ));
         setTurnTtsModel((current) => (
           overview.routes.some((route) => route.name === current)

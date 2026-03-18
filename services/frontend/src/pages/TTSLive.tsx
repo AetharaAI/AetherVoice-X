@@ -131,22 +131,13 @@ export function TTSLive() {
     () =>
       [...voices].sort((left, right) => {
         const rank = (voice: StudioVoice) => {
-          if (voice.runtime_target === "moss_realtime") {
-            return 1;
-          }
           if (voice.runtime_target === "kokoro_realtime") {
             return 0;
           }
-          if (voice.source_model === "moss_voice_generator") {
-            return 2;
-          }
-          if (voice.runtime_target === "moss_tts" || voice.runtime_target === "moss_ttsd") {
-            return 3;
-          }
           if (voice.runtime_target === "chatterbox") {
-            return 4;
+            return 1;
           }
-          return 5;
+          return 2;
         };
         return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
       }),

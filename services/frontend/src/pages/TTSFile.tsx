@@ -32,7 +32,7 @@ export function TTSFile() {
   const isChatterbox = model === "chatterbox";
   const modelHelperText = isChatterbox
     ? "Chatterbox batch mode supports richer shaping controls. These knobs ride in request metadata instead of being prepended into spoken text."
-    : "OpenMOSS batch routes preserve operator notes in metadata. Only the narration body is spoken.";
+    : "Non-default batch routes preserve operator notes in metadata. Only the narration body is spoken.";
 
   useEffect(() => {
     fetchModels()

@@ -100,7 +100,7 @@ class StreamingService:
             adapter = fallback
             adapter_configured = getattr(adapter, "configured", False) or getattr(adapter, "ready", False)
             fallback_route_used = adapter.name if adapter.name != request.model else None
-        prepared_request = self._prepare_stream_request(request, include_audio_bytes=adapter.name == "moss_realtime")
+        prepared_request = self._prepare_stream_request(request, include_audio_bytes=False)
         if adapter.supports_streaming and adapter_configured:
             try:
                 stream_session = await adapter.start_stream(prepared_request)
@@ -111,7 +111,7 @@ class StreamingService:
                     voice_model_fallback_total.labels(service="tts", requested=request.model, used=fallback.name).inc()
                 adapter = fallback
                 fallback_route_used = adapter.name if adapter.name != request.model else None
-                prepared_request = self._prepare_stream_request(request, include_audio_bytes=adapter.name == "moss_realtime")
+                prepared_request = self._prepare_stream_request(request, include_audio_bytes=False)
         runtime_truth = self._runtime_truth(
             prepared_request,
             runtime_path_used=adapter.name,

@@ -60,28 +60,25 @@ function routeLabel(route: StudioRouteDescriptor) {
 
 function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
   return (
-    routes.find((route) => route.name === "moss_voice_generator" && route.invokable)?.name ??
-    routes.find((route) => route.name === "moss_voice_generator")?.name ??
+    routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
+    routes.find((route) => route.name === "chatterbox")?.name ??
     routes.find((route) => route.invokable)?.name ??
     routes[0]?.name ??
-    "moss_voice_generator"
+    "chatterbox"
   );
 }
 
 function preferredVoiceDesignRoute(routes: StudioRouteDescriptor[]) {
   return (
-    routes.find((route) => route.name === "moss_voice_generator" && route.invokable)?.name ??
-    routes.find((route) => route.name === "moss_voice_generator" && route.status === "staged")?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.status === "staged")?.name ??
     routes.find((route) => route.mode === "voice-design")?.name ??
-    "moss_voice_generator"
+    "chatterbox"
   );
 }
 
 function preferredBatchRoute(routes: StudioRouteDescriptor[]) {
   return (
-    routes.find((route) => route.name === "moss_tts" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.mode === "batch" && route.invokable)?.name ??
     "chatterbox"
@@ -90,7 +87,6 @@ function preferredBatchRoute(routes: StudioRouteDescriptor[]) {
 
 function preferredDialogueRoute(routes: StudioRouteDescriptor[]) {
   return (
-    routes.find((route) => route.name === "moss_ttsd" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.mode === "dialogue" && route.invokable)?.name ??
   "chatterbox"
@@ -115,20 +111,20 @@ function designPreviewTextForVoice(voice: StudioVoice) {
 export function TTSStudio() {
   const [overview, setOverview] = useState<StudioOverview | null>(null);
   const [activeTab, setActiveTab] = useState<StudioTab>("Voice Library");
-  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("moss_voice_generator");
-  const [selectedVoiceId, setSelectedVoiceId] = useState("moss_default");
+  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("chatterbox");
+  const [selectedVoiceId, setSelectedVoiceId] = useState("af_sky");
   const [saveToLibrary, setSaveToLibrary] = useState(true);
   const [voiceFilter, setVoiceFilter] = useState("");
   const [cloneName, setCloneName] = useState("Dispatch Reference");
   const [cloneFile, setCloneFile] = useState<File | null>(null);
   const [cloneTags, setCloneTags] = useState("telephony, support");
-  const [cloneNotes, setCloneNotes] = useState("Imported reference voice for future MOSS cloning runs.");
+  const [cloneNotes, setCloneNotes] = useState("Imported reference voice for future studio voice-family testing.");
   const [designVoiceId, setDesignVoiceId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("Warm Dispatcher");
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
   const [designPreviewText, setDesignPreviewText] = useState("AetherPro dispatch confirms the field team is active and en route.");
   const [designPresetSummary, setDesignPresetSummary] = useState("Load a preset to seed the name, prompt, and preview text before rendering or saving.");
-  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("moss_voice_generator");
+  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
   const [batchText, setBatchText] = useState("AetherPro dispatch confirms the blue relay opens at noon. Maintain line integrity and proceed with the service window.");
   const [batchFormat, setBatchFormat] = useState("wav");
   const [batchRoute, setBatchRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
@@ -148,7 +144,7 @@ export function TTSStudio() {
   const routes = overview?.routes ?? [];
   const voices = overview?.voices ?? [];
   const voiceDesignRoutes = useMemo(
-    () => routes.filter((route) => route.name === "moss_voice_generator" || route.name === "chatterbox"),
+    () => routes.filter((route) => route.name === "chatterbox" || route.mode === "voice-design"),
     [routes]
   );
   const selectedRoute = routes.find((route) => route.name === routeTarget) ?? null;
@@ -175,7 +171,7 @@ export function TTSStudio() {
       setRouteTarget(preferredStudioRoute(payload.routes));
     }
     if (!payload.voices.some((voice) => voice.voice_id === selectedVoiceId)) {
-      setSelectedVoiceId(payload.voices[0]?.voice_id ?? "moss_default");
+      setSelectedVoiceId(payload.voices[0]?.voice_id ?? "af_sky");
     }
     if (!payload.routes.some((route) => route.name === batchRoute && route.invokable)) {
       setBatchRoute(preferredBatchRoute(payload.routes));
@@ -183,7 +179,7 @@ export function TTSStudio() {
     if (!payload.routes.some((route) => route.name === dialogueRoute && route.invokable)) {
       setDialogueRoute(preferredDialogueRoute(payload.routes));
     }
-    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "moss_voice_generator" || route.name === "chatterbox"))) {
+    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "chatterbox" || route.mode === "voice-design"))) {
       setDesignRoute(preferredVoiceDesignRoute(payload.routes));
     }
     setProvider(payload.routing.provider);
@@ -220,11 +216,8 @@ export function TTSStudio() {
   }, [designRoute, routes, voiceDesignRoutes]);
 
   const selectedDesignRoute = voiceDesignRoutes.find((route) => route.name === designRoute) ?? null;
-  const designRouteWarmable = Boolean(selectedDesignRoute?.status === "staged" && selectedDesignRoute?.name !== "moss_realtime");
-  const designPreviewRouteTruth =
-    designRoute === "moss_voice_generator"
-      ? "Voice Generator preview. Generated timbre should reflect the design prompt when the sidecar is healthy."
-      : "Fallback preview. This lets you audition text/audio flow, but it is not true voice-generation conditioning.";
+  const designRouteWarmable = Boolean(selectedDesignRoute?.status === "staged");
+  const designPreviewRouteTruth = "Current preview runs through the available studio-safe batch route. Full custom-voice synthesis is being reintroduced in the Qwen phase.";
 
   function applyVoiceDesignState(voice: StudioVoice) {
     setDesignVoiceId(voice.voice_id);
@@ -237,7 +230,7 @@ export function TTSStudio() {
         ? `Loaded ${voice.display_name} from the registry. Review the prompt, render a preview, then save any edits back into the library.`
         : `Loaded ${voice.display_name} from the registry. This record has no stored generation prompt yet, so review the description before previewing.`
     );
-    setDesignRoute(voice.source_model === "moss_voice_generator" ? "moss_voice_generator" : preferredVoiceDesignRoute(routes));
+    setDesignRoute(preferredVoiceDesignRoute(routes));
   }
 
   async function warmRoute(routeName: StudioRouteDescriptor["name"], successMessage: string) {
@@ -329,8 +322,8 @@ export function TTSStudio() {
       const form = new FormData();
       form.set("file", cloneFile);
       form.set("display_name", cloneName);
-      form.set("source_model", "moss_voice_generator");
-      form.set("runtime_target", "moss_voice_generator");
+      form.set("source_model", "imported");
+      form.set("runtime_target", "chatterbox");
       form.set("notes", cloneNotes);
       form.set("tags", cloneTags);
       const voice = await importStudioVoice(form);
@@ -367,7 +360,7 @@ export function TTSStudio() {
           form.set("voice_id", designVoiceId);
         }
         form.set("display_name", displayName);
-        form.set("source_model", "moss_voice_generator");
+        form.set("source_model", designRoute);
         form.set("runtime_target", designRoute);
         form.set("voice_type", "generated");
         form.set("notes", notes);
@@ -381,7 +374,7 @@ export function TTSStudio() {
           voice_id: designVoiceId,
           display_name: displayName,
           type: "generated",
-          source_model: "moss_voice_generator",
+          source_model: designRoute,
           runtime_target: designRoute,
           generation_prompt: generationPrompt,
           tags,
@@ -442,10 +435,6 @@ export function TTSStudio() {
       setError("Choose a valid preview route first.");
       return;
     }
-    if (selectedDesignRoute.name === "moss_realtime") {
-      setError("MOSS Realtime is a live streaming lane, not a batch preview route. Use Voice Generator or Chatterbox fallback for design previews.");
-      return;
-    }
     if (designRouteWarmable) {
       try {
         await warmRoute(
@@ -471,12 +460,12 @@ export function TTSStudio() {
 
   return (
     <div className="page-grid">
-      <Panel title="OpenMOSS capability surface" eyebrow="TTS Studio">
+      <Panel title="Studio transition surface" eyebrow="TTS Studio">
         <section className="studio-hero">
           <div className="studio-hero-copy">
             <p className="eyebrow">Studio control plane</p>
             <h3>Voice design, reusable assets, batch generation, and future LLM routing</h3>
-            <p className="field-hint">This surface is additive. `TTS Live` stays the narrow realtime operator lane, while `TTS Studio` holds the broader OpenMOSS workflows.</p>
+            <p className="field-hint">This surface is in transition. `TTS Live` remains the narrow realtime operator lane, while `TTS Studio` is being cleaned up ahead of the Qwen family buildout.</p>
           </div>
           <div className="studio-hero-actions">
             <div className="field-group">
@@ -563,7 +552,7 @@ export function TTSStudio() {
                     <h3>{voice.display_name}</h3>
                     <Badge value={voice.type} tone={voiceTone(voice.type)} />
                   </div>
-                  <p className="field-hint">{voice.notes ?? "Reusable voice asset for OpenMOSS and fallback batch routes."}</p>
+                  <p className="field-hint">{voice.notes ?? "Reusable voice asset for studio and fallback batch routes."}</p>
                   <div className="voice-card-actions">
                     <button className="secondary compact-button square-action" onClick={() => handleVoiceLibrarySelect(voice)}>
                       Select asset
@@ -616,7 +605,7 @@ export function TTSStudio() {
               <summary>Operator notes</summary>
               <div className="accordion-body">
                 <textarea value={cloneNotes} onChange={(event) => setCloneNotes(event.target.value)} rows={4} />
-                <p className="field-hint">This pass registers the reusable reference asset. The heavy MOSS cloning execution path can bind to the same stored asset later without changing the UI contract.</p>
+                <p className="field-hint">This pass registers a reusable reference asset so it can survive the MOSS decommission and remain available for the Qwen-era studio.</p>
               </div>
             </details>
             <button onClick={handleVoiceImport} disabled={busyAction === "import"}>
@@ -671,7 +660,7 @@ export function TTSStudio() {
                   }}
                 >
                   {voiceDesignRoutes.map((route) => (
-                      <option key={route.name} value={route.name} disabled={route.name === "moss_realtime"}>
+                      <option key={route.name} value={route.name}>
                         {routeLabel(route)}
                       </option>
                     ))}
@@ -691,7 +680,7 @@ export function TTSStudio() {
                   }}
                   rows={6}
                 />
-                <p className="field-hint">Voice Generator is the preferred OpenMOSS route for studio-side voice creation. Render a preview first, then save it into the registry to bind the preview WAV as a reusable live conditioning asset.</p>
+                <p className="field-hint">This description is being captured now so the saved voice record survives the MOSS removal and is ready to map onto the incoming Qwen family.</p>
               </div>
             </details>
             <details className="accordion" open>
@@ -706,7 +695,7 @@ export function TTSStudio() {
                   }}
                   rows={4}
                 />
-                <p className="field-hint">This sample line is spoken with the current generation prompt so you can audition Voice Generator outputs before saving them into the library. If the route is staged, the first click runs a warmup pass and then renders the preview.</p>
+                <p className="field-hint">This sample line is used to audition the current fallback route while the dedicated custom-voice stack is being rebuilt around Qwen.</p>
               </div>
             </details>
             <div className="toolbar">
@@ -760,7 +749,7 @@ export function TTSStudio() {
               <summary>Narration body</summary>
               <div className="accordion-body">
                 <textarea value={batchText} onChange={(event) => setBatchText(event.target.value)} rows={8} />
-                <p className="field-hint">Use this for long-form single-speaker generation. When the OpenMOSS TTS sidecar is healthy it becomes the preferred batch route; Chatterbox remains the fallback for continuity.</p>
+                <p className="field-hint">Use this for long-form single-speaker generation during the transition. Chatterbox remains the stable batch route until Qwen is wired in.</p>
               </div>
             </details>
             <button onClick={() => runBatchGeneration(batchText, batchRoute)} disabled={busyAction === "generate"}>
@@ -794,7 +783,7 @@ export function TTSStudio() {
               <summary>Scene script</summary>
               <div className="accordion-body">
                 <textarea value={dialogueScript} onChange={(event) => setDialogueScript(event.target.value)} rows={8} />
-                <p className="field-hint">TTSD becomes the preferred dialogue route when its sidecar is healthy. Chatterbox remains available as the safe compatibility fallback.</p>
+                <p className="field-hint">Dialogue preview is temporarily routed through the stable compatibility lane while the dedicated multi-voice family is being rebuilt.</p>
               </div>
             </details>
             <button onClick={() => runBatchGeneration(flattenDialogueScript(dialogueScript), dialogueRoute)} disabled={busyAction === "generate"}>
@@ -872,10 +861,10 @@ export function TTSStudio() {
               </div>
             </details>
             <details className="accordion">
-              <summary>Canonical OpenMOSS root</summary>
+              <summary>Current model root</summary>
               <div className="accordion-body">
                 <code className="inline-code block">{overview?.canonical_model_root ?? "loading..."}</code>
-                <p className="field-hint">Studio behavior is anchored to the canonical OpenMOSS model root, not stray cache or snapshot paths.</p>
+                <p className="field-hint">This reflects the current model root in use during the transition away from MOSS and into the Qwen branch work.</p>
               </div>
             </details>
           </section>
@@ -887,10 +876,10 @@ export function TTSStudio() {
             <ul className="tips-list">
               <li>Use `TTS Live` for low-latency turn-taking. Use `TTS Studio` for design, cloning, and long-form generation.</li>
               <li>Imported reference WAVs become reusable assets in the voice registry, so you do not re-upload them every session.</li>
-              <li>Voice Generator is the safest OpenMOSS path for testing new studio voices. Save promising outputs into the library, then bind them to future routes.</li>
-              <li>Batch Narration prefers `moss_tts` when healthy. Dialogue Studio prefers `moss_ttsd` when healthy. Chatterbox remains the fallback instead of being silently removed.</li>
+              <li>Saved prompts and imported reference assets are being preserved now so they can be reused once the Qwen family lands.</li>
+              <li>Chatterbox remains the continuity batch lane during decommission. Realtime telephony continues to rely on Kokoro and Voxtral.</li>
               <li>LLM provider model lists are pulled live from backend-discovered `/models` endpoints so operators are not chasing stale dropdowns.</li>
-              <li>Keep the canonical OpenMOSS root clean: `/mnt/aetherpro/models/audio/OpenMOSS-Team`.</li>
+              <li>This studio is a transition surface today, not the final public-facing Qwen studio.</li>
             </ul>
           </div>
         </details>

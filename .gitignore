@@ -1,5 +1,6 @@
 .env*
 !.env.example
+!.env.moss.example
 services/frontend/node_modules/
 services/frontend/dist/
 __pycache__/

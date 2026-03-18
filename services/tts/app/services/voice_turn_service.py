@@ -138,7 +138,7 @@ class VoiceTurnService:
             voice_id=request.voice,
             model=model_name,
             metadata=request.metadata,
-            include_audio_bytes=model_name == "moss_realtime",
+            include_audio_bytes=False,
         )
         return TTSStreamStartRequest(
             request_id=request.request_id,

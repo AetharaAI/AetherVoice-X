@@ -42,12 +42,12 @@ class FakeStudioService:
     def list_voices(self, tenant_id: str) -> list[VoiceRecord]:
         return [
             VoiceRecord(
-                voice_id="moss_default",
-                display_name="MOSS Default Voice",
+                voice_id="af_sky",
+                display_name="Sky",
                 type="preset",
-                source_model="moss_realtime",
-                runtime_target="moss_realtime",
-                tags=["openmoss"],
+                source_model="kokoro_realtime",
+                runtime_target="kokoro_realtime",
+                tags=["kokoro"],
             ),
             VoiceRecord(
                 voice_id="chatterbox_default",
@@ -74,7 +74,7 @@ class FakeStudioService:
 
 
 class FakeFailingAdapter:
-    name = "moss_voice_generator"
+    name = "studio_voice_design"
     supports_streaming = False
     supports_batch = True
 
@@ -95,11 +95,11 @@ class FakeCapturingChatterboxAdapter:
         return _wav_bytes(), "wav"
 
 
-class FakeOpenMossBatchAdapter:
-    name = "moss_tts"
+class FakeArchiveBatchAdapter:
+    name = "archived_voice_batch"
     supports_streaming = False
     supports_batch = True
-    base_url = "http://moss-tts:8022"
+    base_url = "http://studio-batch:8022"
     configured = True
     ready = True
 
@@ -107,10 +107,10 @@ class FakeOpenMossBatchAdapter:
         return BatchSynthesisResult(
             audio_bytes=_wav_bytes(),
             output_format="wav",
-            model_used="moss_tts",
+            model_used="archived_voice_batch",
             timings={"inference_ms": 321, "total_ms": 654},
             artifacts={
-                "runtime_path_used": "moss_tts",
+                "runtime_path_used": "archived_voice_batch",
                 "resolved_conditioning_asset": "/voices/my_ref.wav",
                 "actual_runtime_conditioning_source": "/tmp/tts_reference_my_ref_24000.wav",
                 "original_reference_audio_path": "/voices/my_ref.wav",
@@ -136,8 +136,8 @@ def _request() -> TTSRequest:
         request_id="req_1",
         session_id="sess_1",
         tenant_id="tenant_1",
-        model="moss_voice_generator",
-        voice="moss_default",
+        model="studio_voice_design",
+        voice="af_sky",
         text="Render a quick preview line.",
         format="wav",
         sample_rate=24000,
@@ -146,7 +146,7 @@ def _request() -> TTSRequest:
     )
 
 
-def test_synthesis_service_uses_chatterbox_safe_voice_on_openmoss_fallback() -> None:
+def test_synthesis_service_uses_chatterbox_safe_voice_on_non_chatterbox_fallback() -> None:
     chatterbox = FakeCapturingChatterboxAdapter()
     service = SynthesisService(
         registry=FakeRegistry(FakeFailingAdapter(), chatterbox),
@@ -159,19 +159,19 @@ def test_synthesis_service_uses_chatterbox_safe_voice_on_openmoss_fallback() -> 
 
     assert chatterbox.requests
     assert chatterbox.requests[0].voice == "default"
-    assert chatterbox.requests[0].metadata["extra"]["fallback_original_voice_id"] == "moss_default"
+    assert chatterbox.requests[0].metadata["extra"]["fallback_original_voice_id"] == "af_sky"
     assert chatterbox.requests[0].metadata["extra"]["fallback_voice_route"] == "chatterbox_default"
     assert result.model_used == "chatterbox"
     assert result.artifacts["fallback_route_used"] == "chatterbox"
-    assert result.artifacts["requested_adapter_name"] == "moss_voice_generator"
+    assert result.artifacts["requested_adapter_name"] == "studio_voice_design"
     assert result.artifacts["resolved_adapter_name"] == "chatterbox"
-    assert result.artifacts["fallback_reason"] == "moss_voice_generator synthesize failed"
+    assert result.artifacts["fallback_reason"] == "studio_voice_design synthesize failed"
     assert result.artifacts["fallback_exception_type"] == "RuntimeError"
 
 
-def test_synthesis_service_preserves_openmoss_runtime_artifacts() -> None:
+def test_synthesis_service_preserves_upstream_runtime_artifacts() -> None:
     service = SynthesisService(
-        registry=FakeRegistry(FakeOpenMossBatchAdapter(), FakeCapturingChatterboxAdapter()),
+        registry=FakeRegistry(FakeArchiveBatchAdapter(), FakeCapturingChatterboxAdapter()),
         storage=FakeStorage(),
         settings=FakeSettings(),
         studio_service=FakeStudioService(),
@@ -181,8 +181,8 @@ def test_synthesis_service_preserves_openmoss_runtime_artifacts() -> None:
         service.synthesize(
             _request().model_copy(
                 update={
-                    "model": "moss_tts",
-                    "voice": "moss_default",
+                    "model": "archived_voice_batch",
+                    "voice": "af_sky",
                     "metadata": {
                         "source": "test",
                         "extra": {
@@ -194,10 +194,10 @@ def test_synthesis_service_preserves_openmoss_runtime_artifacts() -> None:
         )
     )
 
-    assert result.model_used == "moss_tts"
+    assert result.model_used == "archived_voice_batch"
     assert result.timings.inference_ms == 321
     assert result.timings.total_ms == 654
-    assert result.artifacts["runtime_path_used"] == "moss_tts"
+    assert result.artifacts["runtime_path_used"] == "archived_voice_batch"
     assert result.artifacts["resolved_conditioning_asset"] == "/voices/my_ref.wav"
     assert result.artifacts["actual_runtime_conditioning_source"] == "/tmp/tts_reference_my_ref_24000.wav"
     assert result.artifacts["normalized_reference_audio_path"] == "/tmp/tts_reference_my_ref_24000.wav"
@@ -208,8 +208,8 @@ def test_chatterbox_adapter_defaults_non_chatterbox_registry_voice_ids() -> None
     try:
         assert (
             adapter._resolve_voice_file(
-                "moss_default",
-                extra={"resolved_voice": {"runtime_target": "moss_realtime", "source_model": "moss_realtime"}},
+                "af_sky",
+                extra={"resolved_voice": {"runtime_target": "kokoro_realtime", "source_model": "kokoro_realtime"}},
             )
             == "Emily.wav"
         )

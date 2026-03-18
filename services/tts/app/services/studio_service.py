@@ -81,6 +81,8 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox"}
+
 
 class StudioService:
     def __init__(self, settings) -> None:
@@ -120,7 +122,7 @@ class StudioService:
             if not isinstance(entry, dict):
                 continue
             runtime_target = str(entry.get("runtime_target") or "").strip()
-            if runtime_target not in {"kokoro_realtime", "moss_realtime", "moss_tts", "moss_ttsd", "moss_voice_generator", "chatterbox"}:
+            if runtime_target not in ACTIVE_ROUTE_TARGETS:
                 continue
             default_style = dict(entry.get("default_style") or {})
             demo_text = entry.get("demo_sample_text")
@@ -138,7 +140,7 @@ class StudioService:
                     voice_id=str(entry.get("voice_id") or self._slugify(str(entry.get('display_name') or 'seed_voice'))),
                     display_name=str(entry.get("display_name") or "Seed Voice"),
                     type="generated",
-                    source_model=str(entry.get("source_model") or "moss_voice_generator"),
+                    source_model=str(entry.get("source_model") or runtime_target),
                     runtime_target=runtime_target,
                     reference_text=str(demo_text) if demo_text else None,
                     generation_prompt=str(entry.get("prompt")) if entry.get("prompt") else None,
@@ -151,7 +153,7 @@ class StudioService:
 
     def _ensure_seed_registry(self, registry: dict[str, Any]) -> dict[str, Any]:
         merged = dict(registry)
-        existing_records = [VoiceRecord.model_validate(entry) for entry in merged.get("voices", [])]
+        existing_records = [voice for entry in merged.get("voices", []) if (voice := self._coerce_voice_record(entry)) is not None]
         by_id = {voice.voice_id: voice for voice in existing_records}
         for seed_voice in self._seed_voices():
             by_id.setdefault(seed_voice.voice_id, seed_voice)
@@ -261,15 +263,6 @@ class StudioService:
                 tags=["kokoro", "preset", "realtime"],
             ),
             VoiceRecord(
-                voice_id="moss_default",
-                display_name="MOSS Default Voice",
-                type="preset",
-                source_model="moss_realtime",
-                runtime_target="moss_realtime",
-                tags=["openmoss", "default", "realtime"],
-                notes="Baseline OpenMOSS realtime voice binding until custom conditioning is attached.",
-            ),
-            VoiceRecord(
                 voice_id="chatterbox_default",
                 display_name=self.settings.chatterbox_default_voice.rsplit(".", 1)[0],
                 type="fallback",
@@ -282,46 +275,33 @@ class StudioService:
         ]
         return voices
 
+    def _coerce_voice_record(self, entry: Any) -> VoiceRecord | None:
+        if not isinstance(entry, dict):
+            return None
+        payload = dict(entry)
+        voice_id = str(payload.get("voice_id") or "").strip()
+        runtime_target = str(payload.get("runtime_target") or "").strip()
+        if runtime_target not in ACTIVE_ROUTE_TARGETS:
+            if voice_id == "moss_default":
+                return None
+            payload["runtime_target"] = "chatterbox"
+            source_model = str(payload.get("source_model") or "").strip()
+            if source_model.startswith("moss"):
+                payload["source_model"] = "archived_moss"
+            tags = [str(tag) for tag in payload.get("tags") or []]
+            if "archived_moss" not in tags:
+                tags.append("archived_moss")
+            payload["tags"] = tags
+            notes = str(payload.get("notes") or "").strip()
+            archive_note = "Legacy MOSS voice preserved as an archived studio asset during decommission."
+            payload["notes"] = f"{notes} {archive_note}".strip() if notes else archive_note
+        return VoiceRecord.model_validate(payload)
+
     def _read_registry(self) -> dict[str, Any]:
         return json.loads(self.registry_path.read_text(encoding="utf-8"))
 
     def _write_registry(self, payload: dict[str, Any]) -> None:
         self.registry_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-    def _canonical_model_path(self, leaf: str) -> Path:
-        return Path(self.settings.openmoss_model_root) / leaf
-
-    def _container_model_path(self, leaf: str) -> Path:
-        return Path(self.settings.aether_model_root) / "audio" / "OpenMOSS-Team" / leaf
-
-    def _model_candidates(self, leaf: str) -> list[Path]:
-        canonical_root = Path(self.settings.openmoss_model_root)
-        host_root = Path(self.settings.host_model_root)
-        container_root = Path(self.settings.aether_model_root)
-        candidates: list[Path] = [canonical_root / leaf]
-
-        try:
-            relative_root = canonical_root.relative_to(host_root)
-        except ValueError:
-            relative_root = None
-
-        if relative_root is not None:
-            candidates.append(container_root / relative_root / leaf)
-
-        candidates.append(self._container_model_path(leaf))
-
-        deduped: list[Path] = []
-        seen: set[str] = set()
-        for candidate in candidates:
-            key = str(candidate)
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(candidate)
-        return deduped
-
-    def _model_exists(self, leaf: str) -> bool:
-        return any(candidate.exists() for candidate in self._model_candidates(leaf))
 
     def _route_descriptor(
         self,
@@ -329,23 +309,18 @@ class StudioService:
         name: str,
         label: str,
         mode: str,
-        leaf: str | None,
         notes: str,
         model_path: str | None = None,
         fallback_target: str | None = None,
         requires_endpoint: bool = False,
         endpoint: str | None = None,
         runtime_wired: bool = False,
-        force_disabled: bool = False,
     ) -> RouteDescriptor:
-        resolved_model_path = Path(model_path) if model_path else (self._canonical_model_path(leaf) if leaf else None)
+        resolved_model_path = Path(model_path) if model_path else None
         present_on_disk = resolved_model_path.exists() if resolved_model_path else False
         endpoint_ready = self._endpoint_ready(endpoint) if endpoint else False
         configured = bool(endpoint) if resolved_model_path is None else present_on_disk or bool(endpoint)
-        if force_disabled:
-            status = "disabled" if present_on_disk or resolved_model_path is not None else "missing"
-            invokable = False
-        elif runtime_wired and endpoint_ready and ((present_on_disk or resolved_model_path is None) or not requires_endpoint):
+        if runtime_wired and endpoint_ready and ((present_on_disk or resolved_model_path is None) or not requires_endpoint):
             status = "ready"
             invokable = True
         elif configured:
@@ -388,66 +363,21 @@ class StudioService:
                 name="kokoro_realtime",
                 label="Kokoro Realtime",
                 mode="stream",
-                leaf=None,
                 model_path=self.settings.kokoro_model_path,
                 requires_endpoint=True,
                 endpoint=self.settings.kokoro_realtime_base_url,
                 runtime_wired=True,
                 notes="Fast preset-voice lane for telephony and live agent replies. This route is the preferred default when the Kokoro sidecar is healthy.",
-                fallback_target="moss_realtime",
-            ),
-            self._route_descriptor(
-                name="moss_realtime",
-                label="OpenMOSS Realtime",
-                mode="stream",
-                leaf="MOSS-TTS-Realtime",
-                requires_endpoint=True,
-                endpoint=self.settings.moss_realtime_base_url,
-                runtime_wired=True,
-                notes="Live agent lane with session-bound streaming. Final WAV is runtime-backed. Live chunk path remains explicitly marked as experimental until chunk conditioning parity is proven.",
                 fallback_target="chatterbox",
-            ),
-            self._route_descriptor(
-                name="moss_tts",
-                label="OpenMOSS TTS",
-                mode="batch",
-                leaf="MOSS-TTS",
-                requires_endpoint=True,
-                endpoint=self.settings.moss_tts_base_url,
-                runtime_wired=True,
-                notes="Single-speaker OpenMOSS batch synthesis route. Truth stays tied to both the canonical weights and a live sidecar health check.",
-                fallback_target="chatterbox",
-            ),
-            self._route_descriptor(
-                name="moss_ttsd",
-                label="OpenMOSS TTSD",
-                mode="dialogue",
-                leaf="MOSS-TTSD-v1.0",
-                requires_endpoint=True,
-                endpoint=self.settings.moss_ttsd_base_url,
-                runtime_wired=True,
-                notes="Dialogue-focused OpenMOSS route for multi-speaker scenes. Readiness only flips when the TTSD sidecar is healthy.",
-                fallback_target="chatterbox",
-            ),
-            self._route_descriptor(
-                name="moss_voice_generator",
-                label="OpenMOSS Voice Generator",
-                mode="voice-design",
-                leaf="MOSS-VoiceGenerator",
-                requires_endpoint=True,
-                endpoint=self.settings.moss_voice_generator_base_url,
-                runtime_wired=True,
-                notes="VoiceGenerator is the safest default path for studio voice-creation testing. It becomes invokable only when the dedicated sidecar is healthy.",
             ),
             self._route_descriptor(
                 name="chatterbox",
-                label="Chatterbox Fallback",
+                label="Chatterbox",
                 mode="batch",
-                leaf=None,
                 endpoint=self.settings.chatterbox_base_url,
                 requires_endpoint=True,
                 runtime_wired=bool(self.settings.chatterbox_base_url),
-                notes="Existing stable batch fallback preserved for compatibility.",
+                notes="Stable batch route preserved for studio continuity while the Qwen family is being integrated.",
             ),
         ]
 
@@ -458,7 +388,7 @@ class StudioService:
         selected_voice = (
             VoiceRecord.model_validate(resolved_voice)
             if isinstance(resolved_voice, dict)
-            else voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("moss_default") or voices.get("chatterbox_default")
+            else voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("chatterbox_default")
         )
         realtime_profile = ((metadata.get("extra") or {}).get("realtime_profile") or {}) if isinstance(metadata, dict) else {}
         requested_preset = realtime_profile.get("voice_preset_id") if isinstance(realtime_profile, dict) else None
@@ -473,27 +403,6 @@ class StudioService:
             live_chunk_source_route = "kokoro_realtime.sentence_stream"
             final_artifact_source_route = "kokoro_realtime.final_concat"
             notes.append("Kokoro uses built-in preset voices and does not require reference-audio conditioning.")
-        elif runtime_path_used == "moss_realtime":
-            selected_asset = str(extra.get("reference_audio_path") or "").strip() if isinstance(extra, dict) else ""
-            if not selected_asset and selected_voice and selected_voice.reference_audio_path:
-                selected_asset = selected_voice.reference_audio_path
-            if selected_asset:
-                conditioning_source = selected_asset
-                conditioning_active = True
-                notes.append("Realtime session is using the selected voice reference asset when present.")
-            else:
-                conditioning_source = self.settings.moss_prompt_audio_path or "moss_default_unconditioned"
-                conditioning_active = bool(self.settings.moss_prompt_audio_path)
-                if conditioning_active:
-                    notes.append("Realtime session is falling back to the global prompt WAV because the selected voice has no reference asset.")
-                else:
-                    notes.append("Realtime session has no selected reference asset and no global prompt WAV fallback configured.")
-                if selected_voice and selected_voice.generation_prompt:
-                    notes.append("Voice Generator text prompts do not condition realtime directly; a reference WAV is still required for acoustic binding.")
-            resolved_asset = selected_asset or None
-            fallback_voice_path = self.settings.moss_prompt_audio_path or "moss_default_unconditioned"
-            live_chunk_source_route = "moss_realtime.decoder_stream"
-            final_artifact_source_route = "moss_realtime.final_decode"
         else:
             conditioning_source = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else "chatterbox_default_voice"
             conditioning_active = True
@@ -598,7 +507,7 @@ class StudioService:
 
     def list_voices(self, tenant_id: str) -> list[VoiceRecord]:
         registry = self._read_registry()
-        voices = [VoiceRecord.model_validate(entry) for entry in registry.get("voices", [])]
+        voices = [voice for entry in registry.get("voices", []) if (voice := self._coerce_voice_record(entry)) is not None]
         filtered = [voice for voice in voices if voice.tenant_id in {None, tenant_id}]
         return sorted(filtered, key=lambda voice: (voice.type, voice.display_name.lower()))
 
@@ -612,7 +521,7 @@ class StudioService:
         include_audio_bytes: bool = False,
     ) -> dict[str, Any]:
         voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
-        selected = voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("moss_default") or voices.get("chatterbox_default")
+        selected = voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("chatterbox_default")
         extra = dict(metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
         if selected is None:
             return extra
@@ -632,18 +541,6 @@ class StudioService:
             extra.setdefault("reference_text", selected.reference_text)
         if selected.generation_prompt:
             extra.setdefault("generation_prompt", selected.generation_prompt)
-        if model == "moss_ttsd" and selected.reference_audio_path:
-            extra.setdefault(
-                "speaker_references",
-                [
-                    {
-                        "speaker": "S1",
-                        "audio_path": selected.reference_audio_path,
-                        "prompt_text": selected.reference_text or "",
-                        "voice_id": selected.voice_id,
-                    }
-                ],
-            )
         return extra
 
     def create_voice(self, tenant_id: str, payload: VoiceCreateRequest) -> VoiceRecord:
@@ -718,7 +615,7 @@ class StudioService:
             providers=self.list_providers(),
             routing=self.get_routing(),
             example_presets=EXAMPLE_PRESETS,
-            canonical_model_root=str(self.settings.openmoss_model_root),
+            canonical_model_root=str(self.settings.host_model_root),
         )
 
     def _slugify(self, value: str) -> str:
