@@ -273,3 +273,7 @@ services:
 volumes:
   postgres-data:
   minio-data:
+
+networks:
+  default:
+    name: ${AETHER_SHARED_NETWORK:-aether-voice-mesh}

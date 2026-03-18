@@ -15,6 +15,9 @@ ASR_MODEL_ALIASES = {
 
 TTS_MODEL_ALIASES = {
     "chatterbox": "chatterbox",
+    "qwen_customvoice": "qwen_customvoice",
+    "qwen-customvoice": "qwen_customvoice",
+    "qwen/qwen3-tts-12hz-1.7b-customvoice": "qwen_customvoice",
     "kokoro_realtime": "kokoro_realtime",
     "kokoro-realtime": "kokoro_realtime",
     "kokoro": "kokoro_realtime",

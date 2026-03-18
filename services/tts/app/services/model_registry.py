@@ -4,6 +4,7 @@ from aether_common.model_aliases import normalize_tts_model_name
 
 from ..adapters.chatterbox import ChatterboxAdapter
 from ..adapters.kokoro_realtime import KokoroRealtimeAdapter
+from ..adapters.qwen_customvoice import QwenCustomVoiceAdapter
 from ..config import get_settings
 
 
@@ -14,6 +15,13 @@ class ModelRegistry:
             "chatterbox": ChatterboxAdapter(
                 settings.chatterbox_base_url,
                 default_voice=settings.chatterbox_default_voice,
+            ),
+            "qwen_customvoice": QwenCustomVoiceAdapter(
+                base_url=settings.qwen_provider_base_url,
+                model_name=settings.qwen_provider_model_alias,
+                default_voice=settings.qwen_provider_default_voice,
+                default_language=settings.qwen_provider_default_language,
+                timeout_seconds=settings.qwen_provider_timeout_seconds,
             ),
             "kokoro_realtime": KokoroRealtimeAdapter(
                 base_url=settings.kokoro_realtime_base_url,
@@ -26,6 +34,9 @@ class ModelRegistry:
         return self.adapters[normalize_tts_model_name(name)]
 
     def fallback_batch(self):
+        preferred = self.adapters.get("qwen_customvoice")
+        if preferred is not None and (getattr(preferred, "ready", False) or getattr(preferred, "configured", False)):
+            return preferred
         return self.adapters["chatterbox"]
 
     def fallback_stream(self):
@@ -55,12 +66,16 @@ class ModelRegistry:
                     "features": (
                         ["http_passthrough"]
                         if adapter.name == "chatterbox"
-                        else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                        else (
+                            ["provider_http", "batch", "builtin_qwen_voices", "instruction_control"]
+                            if adapter.name == "qwen_customvoice"
+                            else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                        )
                     ),
-                    "route_priority": 5 if adapter.name == "kokoro_realtime" else 30,
+                    "route_priority": 5 if adapter.name == "kokoro_realtime" else (15 if adapter.name == "qwen_customvoice" else 30),
                     "memory_footprint": (
                         "external-service"
-                        if adapter.name == "kokoro_realtime" and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
+                        if adapter.name in {"kokoro_realtime", "qwen_customvoice"} and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
                         else ("external" if adapter.name == "chatterbox" else "external-service")
                     ),
                 }

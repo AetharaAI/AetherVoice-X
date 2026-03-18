@@ -9,14 +9,14 @@ import type { ModelInfo, TTSResponse } from "../types/api";
 
 export function TTSFile() {
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [model, setModel] = useState("chatterbox");
+  const [model, setModel] = useState("qwen_customvoice");
   const [voiceMode, setVoiceMode] = useState("default");
   const [customVoice, setCustomVoice] = useState("");
-  const [operatorNotes, setOperatorNotes] = useState("Support dispatch narration with clear sentence boundaries.");
-  const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
+  const [operatorNotes, setOperatorNotes] = useState("Generate reusable telephony, site, or ad-ready copy with calm pacing and clear sentence boundaries.");
+  const [bodyText, setBodyText] = useState("Thanks for calling Aether Pro. Our sovereign voice agents are online and ready to help.");
   const [speed, setSpeed] = useState(1);
   const [emotion, setEmotion] = useState("calm");
-  const [speakerHint, setSpeakerHint] = useState("support_agent");
+  const [speakerHint, setSpeakerHint] = useState("Ryan");
   const [splitText, setSplitText] = useState(true);
   const [chunkSize, setChunkSize] = useState(180);
   const [temperature, setTemperature] = useState(0.8);
@@ -32,7 +32,7 @@ export function TTSFile() {
   const isChatterbox = model === "chatterbox";
   const modelHelperText = isChatterbox
     ? "Chatterbox batch mode supports richer shaping controls. These knobs ride in request metadata instead of being prepended into spoken text."
-    : "Non-default batch routes preserve operator notes in metadata. Only the narration body is spoken.";
+    : "Qwen CustomVoice is the preferred modular batch lane for reusable brand, site, and telephony assets. Operator notes stay in metadata while only the narration body is spoken.";
 
   useEffect(() => {
     fetchModels()
@@ -98,7 +98,7 @@ export function TTSFile() {
                   <option value="chatterbox">chatterbox</option>
                 )}
               </select>
-              <p className="field-hint">This lane should target Chatterbox for long-form or batch synthesis.</p>
+              <p className="field-hint">This lane should prefer the modular Qwen provider for reusable assets and keep Chatterbox as a compatibility fallback.</p>
             </div>
             <div className="field-group">
               <label htmlFor="tts-file-voice-mode">Voice</label>
@@ -110,7 +110,7 @@ export function TTSFile() {
                 <input
                   value={customVoice}
                   onChange={(event) => setCustomVoice(event.target.value)}
-                  placeholder="example: Emily.wav"
+                    placeholder="example: Ryan"
                 />
               ) : null}
             </div>
@@ -141,7 +141,7 @@ export function TTSFile() {
                 value={bodyText}
                 onChange={(event) => setBodyText(event.target.value)}
                 rows={6}
-                placeholder="Paste the long-form or structured text you want Chatterbox to synthesize."
+                placeholder="Paste the brand, site, telephony, or ad copy you want the selected batch route to synthesize."
               />
             </div>
           </div>

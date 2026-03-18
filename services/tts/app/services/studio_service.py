@@ -81,7 +81,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
-ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox"}
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice"}
 
 
 class StudioService:
@@ -272,6 +272,61 @@ class StudioService:
                 tags=["chatterbox", "fallback", "batch"],
                 notes="Existing Chatterbox fallback voice preserved for stable batch output.",
             ),
+            VoiceRecord(
+                voice_id="qwen_ryan",
+                display_name="Ryan",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "english", "telephony"],
+                default_params={"qwen_speaker": "Ryan"},
+                notes="Qwen built-in English male voice for premium batch, ad, and telephony copy generation.",
+            ),
+            VoiceRecord(
+                voice_id="qwen_aiden",
+                display_name="Aiden",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "english", "telephony"],
+                default_params={"qwen_speaker": "Aiden"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_serena",
+                display_name="Serena",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "female"],
+                default_params={"qwen_speaker": "Serena"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_vivian",
+                display_name="Vivian",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "female"],
+                default_params={"qwen_speaker": "Vivian"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_uncle_fu",
+                display_name="Uncle_Fu",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "male"],
+                default_params={"qwen_speaker": "Uncle_Fu"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_sohee",
+                display_name="Sohee",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "female"],
+                default_params={"qwen_speaker": "Sohee"},
+            ),
         ]
         return voices
 
@@ -368,6 +423,16 @@ class StudioService:
                 endpoint=self.settings.kokoro_realtime_base_url,
                 runtime_wired=True,
                 notes="Fast preset-voice lane for telephony and live agent replies. This route is the preferred default when the Kokoro sidecar is healthy.",
+                fallback_target="chatterbox",
+            ),
+            self._route_descriptor(
+                name="qwen_customvoice",
+                label="Qwen CustomVoice",
+                mode="batch",
+                endpoint=self.settings.qwen_provider_base_url,
+                requires_endpoint=True,
+                runtime_wired=bool(self.settings.qwen_provider_base_url),
+                notes="Premium batch provider for reusable brand, site, telephony, and ad copy. This route is isolated behind the external Qwen provider contract.",
                 fallback_target="chatterbox",
             ),
             self._route_descriptor(

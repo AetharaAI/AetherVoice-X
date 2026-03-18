@@ -60,28 +60,33 @@ function routeLabel(route: StudioRouteDescriptor) {
 
 function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
   return (
+    routes.find((route) => route.name === "qwen_customvoice" && route.invokable)?.name ??
+    routes.find((route) => route.name === "qwen_customvoice")?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox")?.name ??
     routes.find((route) => route.invokable)?.name ??
     routes[0]?.name ??
-    "chatterbox"
+    "qwen_customvoice"
   );
 }
 
 function preferredVoiceDesignRoute(routes: StudioRouteDescriptor[]) {
   return (
+    routes.find((route) => route.name === "qwen_customvoice" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
+    routes.find((route) => route.name === "qwen_customvoice")?.name ??
     routes.find((route) => route.name === "chatterbox" && route.status === "staged")?.name ??
     routes.find((route) => route.mode === "voice-design")?.name ??
-    "chatterbox"
+    "qwen_customvoice"
   );
 }
 
 function preferredBatchRoute(routes: StudioRouteDescriptor[]) {
   return (
+    routes.find((route) => route.name === "qwen_customvoice" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.mode === "batch" && route.invokable)?.name ??
-    "chatterbox"
+    "qwen_customvoice"
   );
 }
 
@@ -111,7 +116,7 @@ function designPreviewTextForVoice(voice: StudioVoice) {
 export function TTSStudio() {
   const [overview, setOverview] = useState<StudioOverview | null>(null);
   const [activeTab, setActiveTab] = useState<StudioTab>("Voice Library");
-  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("chatterbox");
+  const [routeTarget, setRouteTarget] = useState<StudioRouteDescriptor["name"]>("qwen_customvoice");
   const [selectedVoiceId, setSelectedVoiceId] = useState("af_sky");
   const [saveToLibrary, setSaveToLibrary] = useState(true);
   const [voiceFilter, setVoiceFilter] = useState("");
@@ -124,10 +129,10 @@ export function TTSStudio() {
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
   const [designPreviewText, setDesignPreviewText] = useState("AetherPro dispatch confirms the field team is active and en route.");
   const [designPresetSummary, setDesignPresetSummary] = useState("Load a preset to seed the name, prompt, and preview text before rendering or saving.");
-  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
+  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("qwen_customvoice");
   const [batchText, setBatchText] = useState("AetherPro dispatch confirms the blue relay opens at noon. Maintain line integrity and proceed with the service window.");
   const [batchFormat, setBatchFormat] = useState("wav");
-  const [batchRoute, setBatchRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
+  const [batchRoute, setBatchRoute] = useState<StudioRouteDescriptor["name"]>("qwen_customvoice");
   const [dialogueScript, setDialogueScript] = useState("[Narrator] The line stabilizes.\n[Dispatcher] A technician is being dispatched to your location now.");
   const [dialogueRoute, setDialogueRoute] = useState<StudioRouteDescriptor["name"]>("chatterbox");
   const [provider, setProvider] = useState<"openai" | "openrouter" | "litellm" | "anthropic">("litellm");
@@ -144,7 +149,7 @@ export function TTSStudio() {
   const routes = overview?.routes ?? [];
   const voices = overview?.voices ?? [];
   const voiceDesignRoutes = useMemo(
-    () => routes.filter((route) => route.name === "chatterbox" || route.mode === "voice-design"),
+    () => routes.filter((route) => route.name === "qwen_customvoice" || route.name === "chatterbox" || route.mode === "voice-design"),
     [routes]
   );
   const selectedRoute = routes.find((route) => route.name === routeTarget) ?? null;
@@ -179,7 +184,7 @@ export function TTSStudio() {
     if (!payload.routes.some((route) => route.name === dialogueRoute && route.invokable)) {
       setDialogueRoute(preferredDialogueRoute(payload.routes));
     }
-    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "chatterbox" || route.mode === "voice-design"))) {
+    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "qwen_customvoice" || route.name === "chatterbox" || route.mode === "voice-design"))) {
       setDesignRoute(preferredVoiceDesignRoute(payload.routes));
     }
     setProvider(payload.routing.provider);
@@ -217,7 +222,7 @@ export function TTSStudio() {
 
   const selectedDesignRoute = voiceDesignRoutes.find((route) => route.name === designRoute) ?? null;
   const designRouteWarmable = Boolean(selectedDesignRoute?.status === "staged");
-  const designPreviewRouteTruth = "Current preview runs through the available studio-safe batch route. Full custom-voice synthesis is being reintroduced in the Qwen phase.";
+  const designPreviewRouteTruth = "Current preview uses the modular Qwen provider when it is wired and falls back to the compatibility lane when needed.";
 
   function applyVoiceDesignState(voice: StudioVoice) {
     setDesignVoiceId(voice.voice_id);
@@ -680,7 +685,7 @@ export function TTSStudio() {
                   }}
                   rows={6}
                 />
-                <p className="field-hint">This description is being captured now so the saved voice record survives the MOSS removal and is ready to map onto the incoming Qwen family.</p>
+                <p className="field-hint">This description is captured as reusable provider-ready metadata so the saved voice record can ride the modular Qwen lane without another schema refactor.</p>
               </div>
             </details>
             <details className="accordion" open>
@@ -695,7 +700,7 @@ export function TTSStudio() {
                   }}
                   rows={4}
                 />
-                <p className="field-hint">This sample line is used to audition the current fallback route while the dedicated custom-voice stack is being rebuilt around Qwen.</p>
+                <p className="field-hint">This sample line auditions the current provider path and preserves a reusable preview utterance for later brand and telephony asset packs.</p>
               </div>
             </details>
             <div className="toolbar">
@@ -749,7 +754,7 @@ export function TTSStudio() {
               <summary>Narration body</summary>
               <div className="accordion-body">
                 <textarea value={batchText} onChange={(event) => setBatchText(event.target.value)} rows={8} />
-                <p className="field-hint">Use this for long-form single-speaker generation during the transition. Chatterbox remains the stable batch route until Qwen is wired in.</p>
+                <p className="field-hint">Use this for reusable single-speaker brand, site, and telephony assets. Qwen CustomVoice is the preferred batch lane when the provider is available.</p>
               </div>
             </details>
             <button onClick={() => runBatchGeneration(batchText, batchRoute)} disabled={busyAction === "generate"}>
@@ -764,7 +769,7 @@ export function TTSStudio() {
               <div className="field-group">
                 <label htmlFor="dialogue-route">Dialogue route</label>
                 <select id="dialogue-route" value={dialogueRoute} onChange={(event) => setDialogueRoute(event.target.value as StudioRouteDescriptor["name"])}>
-                  {routes.filter((route) => route.mode === "dialogue" || route.name === "chatterbox").map((route) => (
+                  {routes.filter((route) => route.mode === "dialogue" || route.name === "chatterbox" || route.name === "qwen_customvoice").map((route) => (
                     <option key={route.name} value={route.name} disabled={!route.invokable}>
                       {routeLabel(route)}
                     </option>
@@ -783,7 +788,7 @@ export function TTSStudio() {
               <summary>Scene script</summary>
               <div className="accordion-body">
                 <textarea value={dialogueScript} onChange={(event) => setDialogueScript(event.target.value)} rows={8} />
-                <p className="field-hint">Dialogue preview is temporarily routed through the stable compatibility lane while the dedicated multi-voice family is being rebuilt.</p>
+                <p className="field-hint">Dialogue preview can use the modular Qwen batch lane for single-speaker checks or the compatibility lane while multi-voice routing is still being rebuilt.</p>
               </div>
             </details>
             <button onClick={() => runBatchGeneration(flattenDialogueScript(dialogueScript), dialogueRoute)} disabled={busyAction === "generate"}>
@@ -876,8 +881,8 @@ export function TTSStudio() {
             <ul className="tips-list">
               <li>Use `TTS Live` for low-latency turn-taking. Use `TTS Studio` for design, cloning, and long-form generation.</li>
               <li>Imported reference WAVs become reusable assets in the voice registry, so you do not re-upload them every session.</li>
-              <li>Saved prompts and imported reference assets are being preserved now so they can be reused once the Qwen family lands.</li>
-              <li>Chatterbox remains the continuity batch lane during decommission. Realtime telephony continues to rely on Kokoro and Voxtral.</li>
+              <li>Saved prompts and imported reference assets are preserved as reusable provider metadata so they can be replayed into future Qwen lanes without another cleanup pass.</li>
+              <li>Qwen CustomVoice is the modular batch lane for reusable assets. Realtime telephony continues to rely on Kokoro and Voxtral.</li>
               <li>LLM provider model lists are pulled live from backend-discovered `/models` endpoints so operators are not chasing stale dropdowns.</li>
               <li>This studio is a transition surface today, not the final public-facing Qwen studio.</li>
             </ul>
