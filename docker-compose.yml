@@ -186,6 +186,9 @@ services:
     volumes:
       - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
       - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+    networks:
+      - default
+      - qwen_provider_mesh
 
   frontend:
     build:
@@ -275,5 +278,6 @@ volumes:
   minio-data:
 
 networks:
-  default:
+  qwen_provider_mesh:
+    external: true
     name: ${AETHER_SHARED_NETWORK:-aether-voice-mesh}
