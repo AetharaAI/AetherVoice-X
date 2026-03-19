@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 VoiceType = Literal["preset", "cloned", "generated", "imported", "fallback"]
-RouteTarget = Literal["kokoro_realtime", "chatterbox", "qwen_customvoice"]
+RouteTarget = Literal["kokoro_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming"]
 ProviderName = Literal["openai", "openrouter", "litellm", "anthropic"]
 
 

@@ -3,10 +3,11 @@
 ## Current Truth
 
 - `qwen_customvoice` is operational as a modular provider-backed batch lane.
+- `qwen_customvoice_streaming` is the dedicated sibling lane for incremental live testing. It should be exposed beside the batch lane, not replace it.
 - The provider runs outside `AetherVoice-X` in `qwen-experiments` and is reachable over the shared Docker network `aether-voice-mesh`.
 - `ASR Live -> reply from final transcript` already works end to end against `qwen_customvoice`.
 - `TTS Live` now exposes `qwen_customvoice` as a `batch-backed live` lane for voice and latency evaluation.
-- This is not websocket chunk streaming yet. It is one-shot finalized audio per send.
+- The streaming lane should use the same operator page and the same seeded Qwen voices so batch vs live can be compared without relearning the tool.
 
 ## Provider Runtime
 
@@ -23,10 +24,15 @@ Provider endpoints:
 - `POST /v1/warmup`
 - `POST /v1/audio/speech`
 - `POST /v1/audio/speech/stream`
+- `POST /v1/stream/start`
+- `POST /v1/stream/{session_id}/text`
+- `POST /v1/stream/{session_id}/complete`
+- `POST /v1/stream/{session_id}/end`
 
 Current provider truth:
-- `/v1/audio/speech/stream` returns `501`
-- `supports_streaming_contract` is currently `false`
+- `qwen_customvoice` remains the stable batch contract
+- `qwen_customvoice_streaming` owns incremental chunk delivery for live testing
+- `AetherVoice-X` should treat these as two separate lanes on the same page
 
 ## Direct Provider Request
 
@@ -112,12 +118,14 @@ Why use the gateway path:
 
 ## Live Testing In AetherVoice-X
 
-`TTS Live` now has two honest modes:
+`TTS Live` should now have two honest Qwen modes plus the existing Kokoro lane:
 
 - `kokoro_realtime`
   Native websocket streaming lane
 - `qwen_customvoice`
   Batch-backed live lane for quality and latency evaluation
+- `qwen_customvoice_streaming`
+  Incremental provider-driven live lane for first-chunk and chunk-cadence testing
 
 Batch-backed live means:
 - click `Arm batch lane`
@@ -129,6 +137,8 @@ Batch-backed live means:
 This is the correct surface for comparing:
 - voice quality
 - total synthesis latency
+- first-audio latency
+- chunk cadence
 - preset voice usefulness
 - operator workflow
 
@@ -150,6 +160,24 @@ Use Qwen in telephony only in this order:
    - turn latency
 3. Compare against `kokoro_realtime`
 4. Promote only if Qwen wins enough quality to justify the latency tradeoff
+
+## Repo Ownership
+
+`qwen-experiments` owns:
+- provider runtime behavior
+- provider HTTP contract
+- model loading, warmup, and chunking strategy
+- direct runner experiments
+
+`AetherVoice-X` owns:
+- adapters and model aliasing
+- gateway and studio contracts
+- operator pages like `TTS Live`
+- routing truth, voice registry, and product-facing UX
+
+Rule:
+- if the change is about how Qwen loads, chunks, streams, or exposes provider endpoints, change `qwen-experiments`
+- if the change is about how the platform routes, displays, stores, or compares Qwen, change `AetherVoice-X`
 
 ## Known Limitations
 
@@ -173,7 +201,28 @@ Warm the provider:
 curl -X POST http://127.0.0.1:8072/v1/warmup
 ```
 
-Bring up main stack with sidecar profiles:
+Bring up only the provider:
+
+```bash
+cd ~/aetherpro/voice-x/experiments/qwen-experiments
+docker compose up -d --build qwen-provider
+```
+
+Rebuild only TTS after backend adapter changes:
+
+```bash
+cd ~/aetherpro/voice-x/AetherVoice-X
+docker compose up -d --build --no-deps tts
+```
+
+Rebuild only frontend after `TTS Live` changes:
+
+```bash
+cd ~/aetherpro/voice-x/AetherVoice-X
+docker compose up -d --build --no-deps frontend
+```
+
+Bring up main stack with sidecar profiles when a wider pass is actually needed:
 
 ```bash
 COMPOSE_PROFILES=voxtral,kokoro docker compose up -d --build

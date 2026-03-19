@@ -18,6 +18,8 @@ TTS_MODEL_ALIASES = {
     "qwen_customvoice": "qwen_customvoice",
     "qwen-customvoice": "qwen_customvoice",
     "qwen/qwen3-tts-12hz-1.7b-customvoice": "qwen_customvoice",
+    "qwen_customvoice_streaming": "qwen_customvoice_streaming",
+    "qwen-customvoice-streaming": "qwen_customvoice_streaming",
     "kokoro_realtime": "kokoro_realtime",
     "kokoro-realtime": "kokoro_realtime",
     "kokoro": "kokoro_realtime",

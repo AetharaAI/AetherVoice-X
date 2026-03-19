@@ -185,7 +185,7 @@ export interface StudioVoice {
   tenant_id?: string | null;
   type: "preset" | "cloned" | "generated" | "imported" | "fallback";
   source_model: string;
-  runtime_target: "kokoro_realtime" | "chatterbox" | "qwen_customvoice";
+  runtime_target: "kokoro_realtime" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming";
   reference_audio_path?: string | null;
   reference_text?: string | null;
   generation_prompt?: string | null;
@@ -197,7 +197,7 @@ export interface StudioVoice {
 }
 
 export interface StudioRouteDescriptor {
-  name: "kokoro_realtime" | "chatterbox" | "qwen_customvoice";
+  name: "kokoro_realtime" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming";
   label: string;
   mode: "stream" | "batch" | "dialogue" | "voice-design";
   status: "ready" | "staged" | "disabled" | "missing";

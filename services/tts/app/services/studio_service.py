@@ -81,7 +81,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
-ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice"}
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming"}
 
 
 class StudioService:
@@ -327,6 +327,33 @@ class StudioService:
                 tags=["qwen", "preset", "batch", "female"],
                 default_params={"qwen_speaker": "Sohee"},
             ),
+            VoiceRecord(
+                voice_id="qwen_dylan",
+                display_name="Dylan",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "male", "english"],
+                default_params={"qwen_speaker": "Dylan"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_eric",
+                display_name="Eric",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "male", "english"],
+                default_params={"qwen_speaker": "Eric"},
+            ),
+            VoiceRecord(
+                voice_id="qwen_ono_anna",
+                display_name="Ono_Anna",
+                type="preset",
+                source_model="qwen_customvoice",
+                runtime_target="qwen_customvoice",
+                tags=["qwen", "preset", "batch", "female"],
+                default_params={"qwen_speaker": "Ono_Anna"},
+            ),
         ]
         return voices
 
@@ -426,6 +453,16 @@ class StudioService:
                 fallback_target="chatterbox",
             ),
             self._route_descriptor(
+                name="qwen_customvoice_streaming",
+                label="Qwen CustomVoice Streaming",
+                mode="stream",
+                endpoint=self.settings.qwen_provider_base_url,
+                requires_endpoint=True,
+                runtime_wired=bool(self.settings.qwen_provider_base_url),
+                notes="Incremental provider-driven Qwen lane for live chunk and first-audio latency testing on the existing operator page. Keep the batch Qwen route for baseline comparison.",
+                fallback_target="qwen_customvoice",
+            ),
+            self._route_descriptor(
                 name="qwen_customvoice",
                 label="Qwen CustomVoice",
                 mode="batch",
@@ -468,6 +505,24 @@ class StudioService:
             live_chunk_source_route = "kokoro_realtime.sentence_stream"
             final_artifact_source_route = "kokoro_realtime.final_concat"
             notes.append("Kokoro uses built-in preset voices and does not require reference-audio conditioning.")
+        elif runtime_path_used.startswith("qwen_customvoice"):
+            if selected_voice is None or not str(selected_voice.voice_id).startswith("qwen_"):
+                selected_voice = voices.get(f"qwen_{self.settings.qwen_provider_default_voice.lower()}") or selected_voice
+            qwen_speaker = self.settings.qwen_provider_default_voice
+            if selected_voice is not None:
+                qwen_speaker = str(selected_voice.default_params.get("qwen_speaker") or selected_voice.display_name or qwen_speaker)
+            conditioning_source = f"qwen_builtin_voice:{qwen_speaker}"
+            conditioning_active = True
+            resolved_asset = qwen_speaker
+            fallback_voice_path = self.settings.qwen_provider_default_voice
+            if runtime_path_used == "qwen_customvoice_streaming":
+                live_chunk_source_route = "qwen_provider.incremental_stream"
+                final_artifact_source_route = "qwen_provider.stream_finalize"
+                notes.append("Qwen streaming uses provider-side incremental chunk generation against the built-in CustomVoice speaker set.")
+            else:
+                live_chunk_source_route = "qwen_provider.batch_probe"
+                final_artifact_source_route = "qwen_provider.batch_finalize"
+                notes.append("Qwen batch-backed live uses one finalized generation for quality and total-latency evaluation.")
         else:
             conditioning_source = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else "chatterbox_default_voice"
             conditioning_active = True

@@ -129,7 +129,7 @@ function sortVoices(left: StudioVoice, right: StudioVoice) {
     if (voice.runtime_target === "kokoro_realtime") {
       return 0;
     }
-    if (voice.runtime_target === "qwen_customvoice") {
+    if (voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming") {
       return 1;
     }
     if (voice.runtime_target === "chatterbox") {
@@ -174,8 +174,10 @@ export function TTSLive() {
   const isBatchBackedLive = Boolean(selectedModel && !selectedModel.supports_streaming);
   const sortedVoices = useMemo(() => [...voices].sort(sortVoices), [voices]);
   const modelVoices = useMemo(() => {
-    if (model === "qwen_customvoice") {
-      return sortedVoices.filter((voice) => voice.runtime_target === "qwen_customvoice");
+    if (model.startsWith("qwen_customvoice")) {
+      return sortedVoices.filter(
+        (voice) => voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming"
+      );
     }
     if (model === "kokoro_realtime") {
       return sortedVoices.filter((voice) => voice.runtime_target === "kokoro_realtime");
@@ -431,6 +433,8 @@ export function TTSLive() {
             <p className="field-hint">
               {isBatchBackedLive
                 ? "Qwen voices here are the seeded built-in CustomVoice presets. Use this lane to compare voice quality and total generation time before moving into telephony harness tests."
+                : model.startsWith("qwen_customvoice")
+                  ? "Qwen streaming uses the same seeded CustomVoice preset list. This lane is for first-audio and chunk-latency judgment against the batch-backed Qwen probe."
                 : runtimePathUsed === "kokoro_realtime"
                   ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
                   : runtimeTruth?.conditioning_active
