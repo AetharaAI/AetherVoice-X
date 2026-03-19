@@ -1,0 +1,84 @@
+{
+  "models": [
+    {
+      "name": "faster_whisper",
+      "kind": "asr",
+      "supports_streaming": true,
+      "supports_batch": true,
+      "status": "ready",
+      "features": [
+        "timestamps",
+        "language_detection"
+      ],
+      "route_priority": 20,
+      "memory_footprint": "model-managed"
+    },
+    {
+      "name": "voxtral_realtime",
+      "kind": "asr",
+      "supports_streaming": true,
+      "supports_batch": true,
+      "status": "ready",
+      "features": [
+        "timestamps",
+        "language_detection"
+      ],
+      "route_priority": 10,
+      "memory_footprint": "external-service"
+    },
+    {
+      "name": "qwen3_asr",
+      "kind": "asr",
+      "supports_streaming": false,
+      "supports_batch": true,
+      "status": "ready",
+      "features": [
+        "timestamps",
+        "language_detection"
+      ],
+      "route_priority": 20,
+      "memory_footprint": "model-managed"
+    },
+    {
+      "name": "chatterbox",
+      "kind": "tts",
+      "supports_streaming": false,
+      "supports_batch": true,
+      "status": "ready",
+      "features": [
+        "http_passthrough"
+      ],
+      "route_priority": 30,
+      "memory_footprint": "external"
+    },
+    {
+      "name": "qwen_customvoice",
+      "kind": "tts",
+      "supports_streaming": false,
+      "supports_batch": true,
+      "status": "unavailable",
+      "features": [
+        "provider_http",
+        "batch",
+        "builtin_qwen_voices",
+        "instruction_control"
+      ],
+      "route_priority": 15,
+      "memory_footprint": "external-service"
+    },
+    {
+      "name": "kokoro_realtime",
+      "kind": "tts",
+      "supports_streaming": true,
+      "supports_batch": false,
+      "status": "ready",
+      "features": [
+        "realtime",
+        "preset_voices",
+        "adapter_driven_streaming"
+      ],
+      "route_priority": 5,
+      "memory_footprint": "external-service"
+    }
+  ]
+}

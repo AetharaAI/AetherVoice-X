@@ -1,0 +1,549 @@
+{
+  "routes": [
+    {
+      "name": "kokoro_realtime",
+      "label": "Kokoro Realtime",
+      "mode": "stream",
+      "status": "ready",
+      "present_on_disk": true,
+      "runtime_wired": true,
+      "invokable": true,
+      "model_path": "/models/audio/kokoro",
+      "notes": "Fast preset-voice lane for telephony and live agent replies. This route is the preferred default when the Kokoro sidecar is healthy.",
+      "fallback_target": "chatterbox"
+    },
+    {
+      "name": "qwen_customvoice",
+      "label": "Qwen CustomVoice",
+      "mode": "batch",
+      "status": "ready",
+      "present_on_disk": true,
+      "runtime_wired": true,
+      "invokable": true,
+      "model_path": null,
+      "notes": "Premium batch provider for reusable brand, site, telephony, and ad copy. This route is isolated behind the external Qwen provider contract.",
+      "fallback_target": "chatterbox"
+    },
+    {
+      "name": "chatterbox",
+      "label": "Chatterbox",
+      "mode": "batch",
+      "status": "ready",
+      "present_on_disk": true,
+      "runtime_wired": true,
+      "invokable": true,
+      "model_path": null,
+      "notes": "Stable batch route preserved for studio continuity while the Qwen family is being integrated.",
+      "fallback_target": null
+    }
+  ],
+  "voices": [
+    {
+      "voice_id": "chatterbox_default",
+      "display_name": "Emily",
+      "tenant_id": null,
+      "type": "fallback",
+      "source_model": "chatterbox",
+      "runtime_target": "chatterbox",
+      "reference_audio_path": "Emily.wav",
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "chatterbox",
+        "fallback",
+        "batch"
+      ],
+      "default_params": {},
+      "notes": "Existing Chatterbox fallback voice preserved for stable batch output."
+    },
+    {
+      "voice_id": "am_adam",
+      "display_name": "Adam",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "qwen_aiden",
+      "display_name": "Aiden",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "english",
+        "telephony"
+      ],
+      "default_params": {
+        "qwen_speaker": "Aiden"
+      },
+      "notes": null
+    },
+    {
+      "voice_id": "af_bella",
+      "display_name": "Bella",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "bf_emma",
+      "display_name": "Emma",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "bm_george",
+      "display_name": "George",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "af_heart",
+      "display_name": "Heart",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "bf_isabella",
+      "display_name": "Isabella",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "bm_lewis",
+      "display_name": "Lewis",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "am_michael",
+      "display_name": "Michael",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "af_nicole",
+      "display_name": "Nicole",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "qwen_ryan",
+      "display_name": "Ryan",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "english",
+        "telephony"
+      ],
+      "default_params": {
+        "qwen_speaker": "Ryan"
+      },
+      "notes": "Qwen built-in English male voice for premium batch, ad, and telephony copy generation."
+    },
+    {
+      "voice_id": "af_sarah",
+      "display_name": "Sarah",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime"
+      ],
+      "default_params": {},
+      "notes": null
+    },
+    {
+      "voice_id": "qwen_serena",
+      "display_name": "Serena",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "female"
+      ],
+      "default_params": {
+        "qwen_speaker": "Serena"
+      },
+      "notes": null
+    },
+    {
+      "voice_id": "af_sky",
+      "display_name": "Sky",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "kokoro_realtime",
+      "runtime_target": "kokoro_realtime",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "kokoro",
+        "preset",
+        "realtime",
+        "telephony"
+      ],
+      "default_params": {},
+      "notes": "Fast Kokoro preset voice for the default live agent lane."
+    },
+    {
+      "voice_id": "qwen_sohee",
+      "display_name": "Sohee",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "female"
+      ],
+      "default_params": {
+        "qwen_speaker": "Sohee"
+      },
+      "notes": null
+    },
+    {
+      "voice_id": "qwen_uncle_fu",
+      "display_name": "Uncle_Fu",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "male"
+      ],
+      "default_params": {
+        "qwen_speaker": "Uncle_Fu"
+      },
+      "notes": null
+    },
+    {
+      "voice_id": "qwen_vivian",
+      "display_name": "Vivian",
+      "tenant_id": null,
+      "type": "preset",
+      "source_model": "qwen_customvoice",
+      "runtime_target": "qwen_customvoice",
+      "reference_audio_path": null,
+      "reference_text": null,
+      "generation_prompt": null,
+      "sample_rate": 24000,
+      "language": "en",
+      "tags": [
+        "qwen",
+        "preset",
+        "batch",
+        "female"
+      ],
+      "default_params": {
+        "qwen_speaker": "Vivian"
+      },
+      "notes": null
+    }
+  ],
+  "providers": [
+    {
+      "provider": "openai",
+      "label": "OpenAI",
+      "enabled": true,
+      "base_url": "https://api.openai.com/v1",
+      "auth_configured": true,
+      "notes": "Standard OpenAI-compatible /models discovery."
+    },
+    {
+      "provider": "openrouter",
+      "label": "OpenRouter",
+      "enabled": true,
+      "base_url": "https://openrouter.ai/api/v1",
+      "auth_configured": true,
+      "notes": "OpenRouter /models discovery through backend-held auth."
+    },
+    {
+      "provider": "litellm",
+      "label": "LiteLLM",
+      "enabled": true,
+      "base_url": "https://api.aetherpro.tech/v1",
+      "auth_configured": true,
+      "notes": "Internal LiteLLM or proxy gateway model discovery."
+    },
+    {
+      "provider": "anthropic",
+      "label": "Anthropic",
+      "enabled": true,
+      "base_url": null,
+      "auth_configured": true,
+      "notes": "Anthropic is stubbed for this pass."
+    }
+  ],
+  "routing": {
+    "provider": "litellm",
+    "model": null,
+    "base_url": "https://api.aetherpro.tech/v1",
+    "enabled": true,
+    "mode": "manual",
+    "system_prompt": null,
+    "metadata": {}
+  },
+  "example_presets": [
+    {
+      "title": "Warm female dispatcher",
+      "description": "Calm service voice for phone-based resolution and ETA updates.",
+      "tags": [
+        "telephony",
+        "warm",
+        "dispatcher"
+      ],
+      "generation_prompt": "Warm female dispatcher voice with calm authority, clean articulation, and telephony-friendly pacing."
+    },
+    {
+      "title": "Calm documentary narrator",
+      "description": "Neutral, polished narration for explainer or documentary reads.",
+      "tags": [
+        "narration",
+        "calm",
+        "documentary"
+      ],
+      "generation_prompt": "Calm documentary narrator with polished diction, medium pace, and gentle authority."
+    },
+    {
+      "title": "Gritty field technician",
+      "description": "Blue-collar service voice with slight rasp and practical energy.",
+      "tags": [
+        "service",
+        "field",
+        "gritty"
+      ],
+      "generation_prompt": "Gritty field technician voice with slight rasp, practical tone, and confident service cadence."
+    },
+    {
+      "title": "Noir detective monologue",
+      "description": "Moody late-night narration voice with cinematic delivery.",
+      "tags": [
+        "noir",
+        "monologue",
+        "cinematic"
+      ],
+      "generation_prompt": "Noir detective monologue voice with smoky texture, reflective pacing, and cinematic emphasis."
+    },
+    {
+      "title": "Stoic motivational narrator",
+      "description": "Controlled inspirational voice for training and guidance content.",
+      "tags": [
+        "motivational",
+        "stoic",
+        "narration"
+      ],
+      "generation_prompt": "Stoic motivational narrator with controlled intensity, crisp pacing, and grounded conviction."
+    },
+    {
+      "title": "Scientific abstract reader",
+      "description": "Precise academic voice for technical summaries and papers.",
+      "tags": [
+        "scientific",
+        "academic",
+        "technical"
+      ],
+      "generation_prompt": "Scientific abstract reader with precise diction, measured rhythm, and neutral academic tone."
+    },
+    {
+      "title": "Children's story narrator",
+      "description": "Bright, friendly storytelling voice for family content.",
+      "tags": [
+        "children",
+        "story",
+        "friendly"
+      ],
+      "generation_prompt": "Children's story narrator with bright warmth, playful cadence, and clear expressive delivery."
+    },
+    {
+      "title": "Fairy tale villain monologue",
+      "description": "Stylized dramatic voice for theatrical character work.",
+      "tags": [
+        "villain",
+        "fantasy",
+        "dramatic"
+      ],
+      "generation_prompt": "Fairy tale villain monologue voice with theatrical menace, elegant diction, and dramatic pauses."
+    }
+  ],
+  "canonical_model_root": "/mnt/aetherpro/models"
+}
