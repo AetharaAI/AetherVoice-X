@@ -94,6 +94,12 @@ Key provider endpoints:
 - intended for first-chunk, chunk-cadence, and live-lane testing
 - should be compared directly against both `kokoro_realtime` and `qwen_customvoice`
 
+### `qwen_voice_design`
+
+- prompt-driven batch lane for creating new voice assets
+- intended for `TTS Studio -> Voice Design`
+- should be used to generate reusable assets before any promotion into live telephony lanes
+
 ## Voice Inventory
 
 Current seeded Qwen built-in voices:
@@ -110,6 +116,7 @@ Current seeded Qwen built-in voices:
 Current practical grouping rule:
 - `voice_id` starts with `qwen_` => Qwen preset
 - `runtime_target === "kokoro_realtime"` => Kokoro preset
+- `runtime_target === "qwen_voice_design"` => prompt-driven Qwen studio asset
 - `runtime_target === "chatterbox"` => Chatterbox fallback
 
 ## Recommended Telephony Integration Path
@@ -166,6 +173,31 @@ Start payload:
     "lane": "live_probe",
     "extra": {
       "qwen_instructions": "Speak in a calm, telephony-friendly style."
+    }
+  }
+}
+```
+
+### Voice design probe
+
+Use:
+- `POST /v1/tts/synthesize`
+
+Example:
+
+```json
+{
+  "model": "qwen_voice_design",
+  "voice": "qwen_serena",
+  "text": "Thank you for calling Aether Voice. How may I assist you today?",
+  "format": "wav",
+  "sample_rate": 24000,
+  "stream": false,
+  "metadata": {
+    "source": "studio",
+    "lane": "voice_design_probe",
+    "extra": {
+      "generation_prompt": "Warm American female receptionist voice with clear diction, natural cadence, and polished phone presence."
     }
   }
 }
@@ -245,6 +277,7 @@ Provider docs:
 Expected truths:
 - `qwen_customvoice` present and ready
 - `qwen_customvoice_streaming` present and ready
+- `qwen_voice_design` present and ready
 - `TTS Live` dropdown shows both Qwen lanes
 - Qwen voices appear under both Qwen entries
 
@@ -284,6 +317,7 @@ Short-term:
 - keep `kokoro_realtime` as the production telephony baseline
 - keep `qwen_customvoice` for premium batch quality and asset generation
 - use `qwen_customvoice_streaming` as the live evaluation lane
+- use `qwen_voice_design` in studio for creating reusable voice assets, not as an always-hot live lane
 
 Promotion bar:
 - only move telephony toward Qwen streaming after repeatable live probes show acceptable first-audio latency, chunk behavior, and quality.

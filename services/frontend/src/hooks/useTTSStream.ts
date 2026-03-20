@@ -71,6 +71,29 @@ type ConnectOptions = {
   metadata?: Record<string, unknown>;
 };
 
+type StreamLatencyState = {
+  observedFirstChunkMs: number | null;
+  observedFinalAudioMs: number | null;
+  backendFirstChunkMs: number | null;
+  backendInferenceMs: number | null;
+  backendTotalMs: number | null;
+};
+
+const EMPTY_LATENCIES: StreamLatencyState = {
+  observedFirstChunkMs: null,
+  observedFinalAudioMs: null,
+  backendFirstChunkMs: null,
+  backendInferenceMs: null,
+  backendTotalMs: null,
+};
+
+function readNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  return null;
+}
+
 export function useTTSStream() {
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -83,15 +106,21 @@ export function useTTSStream() {
   const [wsUrl, setWsUrl] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [runtimeTruth, setRuntimeTruth] = useState<TTSStreamRuntimeTruth | null>(null);
+  const [latencies, setLatencies] = useState<StreamLatencyState>(EMPTY_LATENCIES);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextPlaybackTimeRef = useRef(0);
   const chunkCountRef = useRef(0);
   const finalUrlRef = useRef<string | null>(null);
   const phaseRef = useRef("idle");
+  const requestStartedAtRef = useRef<number | null>(null);
 
   function appendEvent(message: string) {
     setEvents((current) => [...current.slice(-11), message]);
+  }
+
+  function mergeLatencies(update: Partial<StreamLatencyState>) {
+    setLatencies((current) => ({ ...current, ...update }));
   }
 
   function appendRuntimeEvents(runtime: TTSStreamRuntimeTruth) {
@@ -164,6 +193,7 @@ export function useTTSStream() {
     revokeFinalUrl();
     chunkCountRef.current = 0;
     nextPlaybackTimeRef.current = 0;
+    requestStartedAtRef.current = null;
     setConnected(false);
     setSessionId(null);
     setChunkCount(0);
@@ -173,6 +203,7 @@ export function useTTSStream() {
     setWsUrl(null);
     setModelUsed(null);
     setRuntimeTruth(null);
+    setLatencies(EMPTY_LATENCIES);
     setPhase("idle");
   }
 
@@ -249,6 +280,7 @@ export function useTTSStream() {
           message?: string;
         };
         const runtime = payload.metadata?.runtime as TTSStreamRuntimeTruth | undefined;
+        const timings = payload.metadata?.timings as Record<string, unknown> | undefined;
         if (runtime) {
           mergeRuntimeTruth(runtime);
         }
@@ -262,6 +294,13 @@ export function useTTSStream() {
           return;
         }
         if (payload.type === "audio_chunk") {
+          const requestStartedAt = requestStartedAtRef.current;
+          const nextChunkCount = chunkCountRef.current + 1;
+          if (nextChunkCount === 1 && requestStartedAt !== null) {
+            const observedFirstChunkMs = Math.round(performance.now() - requestStartedAt);
+            mergeLatencies({ observedFirstChunkMs });
+            appendEvent(`first chunk observed · ${observedFirstChunkMs}ms`);
+          }
           chunkCountRef.current += 1;
           setChunkCount(chunkCountRef.current);
           setPhase("streaming-audio");
@@ -271,6 +310,14 @@ export function useTTSStream() {
           }
         }
         if (payload.type === "final_audio" && payload.audio_b64) {
+          const requestStartedAt = requestStartedAtRef.current;
+          const observedFinalAudioMs = requestStartedAt !== null ? Math.round(performance.now() - requestStartedAt) : null;
+          mergeLatencies({
+            observedFinalAudioMs,
+            backendFirstChunkMs: readNumber(timings?.first_chunk_ms),
+            backendInferenceMs: readNumber(timings?.inference_ms),
+            backendTotalMs: readNumber(timings?.total_ms),
+          });
           const bytes = b64ToBytes(payload.audio_b64);
           revokeFinalUrl();
           const mimeType = payload.format ? `audio/${payload.format}` : "audio/wav";
@@ -282,6 +329,12 @@ export function useTTSStream() {
           appendEvent(
             typeof payload.metadata?.audio_url === "string" ? `final audio ready · ${payload.metadata.audio_url}` : "final audio ready"
           );
+          if (observedFinalAudioMs !== null) {
+            appendEvent(`final audio observed · ${observedFinalAudioMs}ms`);
+          }
+          if (readNumber(timings?.total_ms) !== null) {
+            appendEvent(`provider total · ${readNumber(timings?.total_ms)}ms`);
+          }
           socket.close();
         }
       };
@@ -311,6 +364,8 @@ export function useTTSStream() {
     }
     setError(null);
     setLastSentChars(text.length);
+    requestStartedAtRef.current = performance.now();
+    setLatencies(EMPTY_LATENCIES);
     setPhase("generating");
     void ensureAudioContext();
     for (const [index, delta] of deltas.entries()) {
@@ -348,6 +403,7 @@ export function useTTSStream() {
     wsUrl,
     modelUsed,
     runtimeTruth,
+    latencies,
     chunkCount,
     lastSentChars,
     finalUrl,

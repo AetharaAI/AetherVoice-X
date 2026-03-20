@@ -72,12 +72,14 @@ function preferredStudioRoute(routes: StudioRouteDescriptor[]) {
 
 function preferredVoiceDesignRoute(routes: StudioRouteDescriptor[]) {
   return (
+    routes.find((route) => route.name === "qwen_voice_design" && route.invokable)?.name ??
+    routes.find((route) => route.name === "qwen_voice_design")?.name ??
     routes.find((route) => route.name === "qwen_customvoice" && route.invokable)?.name ??
     routes.find((route) => route.name === "chatterbox" && route.invokable)?.name ??
     routes.find((route) => route.name === "qwen_customvoice")?.name ??
     routes.find((route) => route.name === "chatterbox" && route.status === "staged")?.name ??
     routes.find((route) => route.mode === "voice-design")?.name ??
-    "qwen_customvoice"
+    "qwen_voice_design"
   );
 }
 
@@ -129,7 +131,7 @@ export function TTSStudio() {
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
   const [designPreviewText, setDesignPreviewText] = useState("AetherPro dispatch confirms the field team is active and en route.");
   const [designPresetSummary, setDesignPresetSummary] = useState("Load a preset to seed the name, prompt, and preview text before rendering or saving.");
-  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("qwen_customvoice");
+  const [designRoute, setDesignRoute] = useState<StudioRouteDescriptor["name"]>("qwen_voice_design");
   const [batchText, setBatchText] = useState("AetherPro dispatch confirms the blue relay opens at noon. Maintain line integrity and proceed with the service window.");
   const [batchFormat, setBatchFormat] = useState("wav");
   const [batchRoute, setBatchRoute] = useState<StudioRouteDescriptor["name"]>("qwen_customvoice");
@@ -149,7 +151,7 @@ export function TTSStudio() {
   const routes = overview?.routes ?? [];
   const voices = overview?.voices ?? [];
   const voiceDesignRoutes = useMemo(
-    () => routes.filter((route) => route.name === "qwen_customvoice" || route.name === "chatterbox" || route.mode === "voice-design"),
+    () => routes.filter((route) => route.name === "qwen_customvoice" || route.name === "qwen_voice_design" || route.name === "chatterbox" || route.mode === "voice-design"),
     [routes]
   );
   const selectedRoute = routes.find((route) => route.name === routeTarget) ?? null;
@@ -184,7 +186,7 @@ export function TTSStudio() {
     if (!payload.routes.some((route) => route.name === dialogueRoute && route.invokable)) {
       setDialogueRoute(preferredDialogueRoute(payload.routes));
     }
-    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "qwen_customvoice" || route.name === "chatterbox" || route.mode === "voice-design"))) {
+    if (!payload.routes.some((route) => route.name === designRoute && (route.name === "qwen_customvoice" || route.name === "qwen_voice_design" || route.name === "chatterbox" || route.mode === "voice-design"))) {
       setDesignRoute(preferredVoiceDesignRoute(payload.routes));
     }
     setProvider(payload.routing.provider);

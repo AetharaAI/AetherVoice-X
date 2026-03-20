@@ -6,6 +6,7 @@ from ..adapters.chatterbox import ChatterboxAdapter
 from ..adapters.kokoro_realtime import KokoroRealtimeAdapter
 from ..adapters.qwen_customvoice import QwenCustomVoiceAdapter
 from ..adapters.qwen_customvoice_streaming import QwenCustomVoiceStreamingAdapter
+from ..adapters.qwen_voice_design import QwenVoiceDesignAdapter
 from ..config import get_settings
 
 
@@ -27,6 +28,13 @@ class ModelRegistry:
             "qwen_customvoice_streaming": QwenCustomVoiceStreamingAdapter(
                 base_url=settings.qwen_provider_base_url,
                 model_name=settings.qwen_provider_streaming_model_alias,
+                default_voice=settings.qwen_provider_default_voice,
+                default_language=settings.qwen_provider_default_language,
+                timeout_seconds=settings.qwen_provider_timeout_seconds,
+            ),
+            "qwen_voice_design": QwenVoiceDesignAdapter(
+                base_url=settings.qwen_provider_base_url,
+                model_name=settings.qwen_provider_voice_design_model_alias,
                 default_voice=settings.qwen_provider_default_voice,
                 default_language=settings.qwen_provider_default_language,
                 timeout_seconds=settings.qwen_provider_timeout_seconds,
@@ -75,23 +83,32 @@ class ModelRegistry:
                         ["http_passthrough"]
                         if adapter.name == "chatterbox"
                         else (
-                            ["provider_http", "batch", "builtin_qwen_voices", "instruction_control"]
+                                ["provider_http", "batch", "builtin_qwen_voices", "instruction_control"]
                             if adapter.name == "qwen_customvoice"
                             else (
                                 ["provider_http", "streaming", "builtin_qwen_voices", "provider_incremental_stream"]
                                 if adapter.name == "qwen_customvoice_streaming"
-                                else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                else (
+                                    ["provider_http", "batch", "voice_design", "prompt_driven_generation"]
+                                    if adapter.name == "qwen_voice_design"
+                                    else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                )
                             )
                         )
                     ),
                     "route_priority": (
                         5
                         if adapter.name == "kokoro_realtime"
-                        else (10 if adapter.name == "qwen_customvoice_streaming" else (15 if adapter.name == "qwen_customvoice" else 30))
+                        else (
+                            10
+                            if adapter.name == "qwen_customvoice_streaming"
+                            else (15 if adapter.name == "qwen_customvoice" else (18 if adapter.name == "qwen_voice_design" else 30))
+                        )
                     ),
                     "memory_footprint": (
                         "external-service"
-                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming"} and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
+                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
+                        and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
                         else ("external" if adapter.name == "chatterbox" else "external-service")
                     ),
                 }

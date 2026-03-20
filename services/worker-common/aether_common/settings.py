@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     qwen_provider_timeout_seconds: float = Field(default=180.0, validation_alias=AliasChoices("QWEN_PROVIDER_TIMEOUT_SECONDS"))
     qwen_provider_model_alias: str = Field(default="qwen_customvoice", validation_alias=AliasChoices("QWEN_PROVIDER_MODEL_ALIAS"))
     qwen_provider_streaming_model_alias: str = Field(default="qwen_customvoice_streaming", validation_alias=AliasChoices("QWEN_PROVIDER_STREAMING_MODEL_ALIAS"))
+    qwen_provider_voice_design_model_alias: str = Field(default="qwen_voice_design", validation_alias=AliasChoices("QWEN_PROVIDER_VOICE_DESIGN_MODEL_ALIAS"))
     qwen_provider_default_voice: str = Field(default="Ryan", validation_alias=AliasChoices("QWEN_PROVIDER_DEFAULT_VOICE"))
     qwen_provider_default_language: str = Field(default="English", validation_alias=AliasChoices("QWEN_PROVIDER_DEFAULT_LANGUAGE"))
     kokoro_model_id: str = Field(default="hexgrad/Kokoro-82M", validation_alias=AliasChoices("KOKORO_MODEL_ID"))

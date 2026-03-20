@@ -4,9 +4,11 @@
 
 - `qwen_customvoice` is operational as a modular provider-backed batch lane.
 - `qwen_customvoice_streaming` is the dedicated sibling lane for incremental live testing. It should be exposed beside the batch lane, not replace it.
+- `qwen_voice_design` is the next modular studio lane for prompt-driven voice creation and reusable asset generation.
 - The provider runs outside `AetherVoice-X` in `qwen-experiments` and is reachable over the shared Docker network `aether-voice-mesh`.
 - `ASR Live -> reply from final transcript` already works end to end against `qwen_customvoice`.
 - `TTS Live` now exposes `qwen_customvoice` as a `batch-backed live` lane for voice and latency evaluation.
+- `TTS Live` now exposes `qwen_customvoice_streaming` as the sibling incremental lane on the same operator page.
 - The streaming lane should use the same operator page and the same seeded Qwen voices so batch vs live can be compared without relearning the tool.
 
 ## Provider Runtime
@@ -32,6 +34,7 @@ Provider endpoints:
 Current provider truth:
 - `qwen_customvoice` remains the stable batch contract
 - `qwen_customvoice_streaming` owns incremental chunk delivery for live testing
+- `qwen_voice_design` owns prompt-driven batch voice creation for studio use
 - `AetherVoice-X` should treat these as two separate lanes on the same page
 
 ## Direct Provider Request
@@ -116,6 +119,33 @@ Why use the gateway path:
 - same model alias normalization
 - same studio voice-resolution behavior
 
+## Voice Design Request
+
+Use this when another app wants prompt-driven voice creation through the platform without talking to the provider directly.
+
+Gateway endpoint:
+- `POST /v1/tts/synthesize`
+
+Example:
+
+```json
+{
+  "model": "qwen_voice_design",
+  "voice": "qwen_serena",
+  "text": "Thank you for calling, this is Maya with Aether Voice. How may I assist you today?",
+  "format": "wav",
+  "sample_rate": 24000,
+  "stream": false,
+  "metadata": {
+    "source": "studio",
+    "lane": "voice_design_probe",
+    "extra": {
+      "generation_prompt": "Warm American female receptionist voice with clean diction, natural telephony cadence, and approachable confidence."
+    }
+  }
+}
+```
+
 ## Live Testing In AetherVoice-X
 
 `TTS Live` should now have two honest Qwen modes plus the existing Kokoro lane:
@@ -168,12 +198,14 @@ Use Qwen in telephony only in this order:
 - provider HTTP contract
 - model loading, warmup, and chunking strategy
 - direct runner experiments
+- VoiceDesign model loading and prompt-driven generation behavior
 
 `AetherVoice-X` owns:
 - adapters and model aliasing
 - gateway and studio contracts
 - operator pages like `TTS Live`
 - routing truth, voice registry, and product-facing UX
+- how VoiceDesign outputs become reusable studio assets
 
 Rule:
 - if the change is about how Qwen loads, chunks, streams, or exposes provider endpoints, change `qwen-experiments`
@@ -181,10 +213,11 @@ Rule:
 
 ## Known Limitations
 
-- Qwen provider is currently batch only
 - `flash_attn` is not installed in the provider container, so it falls back to `sdpa`
 - warmup is recommended before serious latency testing
-- `TTS Live` Qwen lane is for honest evaluation, not a claim of realtime websocket streaming
+- `qwen_customvoice` remains the stable batch contract
+- `qwen_customvoice_streaming` is the live evaluation lane, but it still needs telephony-grade latency proof before promotion
+- `qwen_voice_design` is batch-only by design in this stack
 
 ## Operator Commands
 

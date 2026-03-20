@@ -81,7 +81,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
-ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming"}
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
 
 
 class StudioService:
@@ -471,6 +471,16 @@ class StudioService:
                 runtime_wired=bool(self.settings.qwen_provider_base_url),
                 notes="Premium batch provider for reusable brand, site, telephony, and ad copy. This route is isolated behind the external Qwen provider contract.",
                 fallback_target="chatterbox",
+            ),
+            self._route_descriptor(
+                name="qwen_voice_design",
+                label="Qwen VoiceDesign",
+                mode="voice-design",
+                endpoint=self.settings.qwen_provider_base_url,
+                requires_endpoint=True,
+                runtime_wired=bool(self.settings.qwen_provider_base_url),
+                notes="Prompt-driven Qwen voice creation lane for generating new reusable assets inside TTS Studio without disturbing the live operator routes.",
+                fallback_target="qwen_customvoice",
             ),
             self._route_descriptor(
                 name="chatterbox",

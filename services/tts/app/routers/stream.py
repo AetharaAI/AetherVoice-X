@@ -53,6 +53,8 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                         "format": result.artifacts.get("format", "wav"),
                         "metadata": {
                             "audio_url": result.audio_url,
+                            "timings": result.timings.model_dump(),
+                            "duration_ms": result.duration_ms,
                             "runtime": result.artifacts.get("runtime"),
                             "live_chunk_source_route": result.artifacts.get("live_chunk_source_route"),
                             "final_artifact_source_route": result.artifacts.get("final_artifact_source_route"),

@@ -60,13 +60,15 @@ class QwenCustomVoiceAdapter(BaseTTSAdapter):
         extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
         resolved_voice = extra.get("resolved_voice")
         if isinstance(resolved_voice, dict):
+            runtime_target = str(resolved_voice.get("runtime_target") or "").strip()
             default_params = dict(resolved_voice.get("default_params") or {})
             qwen_speaker = str(default_params.get("qwen_speaker") or "").strip()
             if qwen_speaker:
                 return qwen_speaker
             display_name = str(resolved_voice.get("display_name") or "").strip()
-            if display_name:
+            if display_name and runtime_target in {"qwen_customvoice", "qwen_customvoice_streaming"}:
                 return display_name
+            return self.default_voice
         candidate = (request.voice or "").strip()
         if not candidate or candidate in {"default", "chatterbox_default"}:
             return self.default_voice
@@ -136,7 +138,9 @@ class QwenCustomVoiceAdapter(BaseTTSAdapter):
     async def warmup(self, metadata: dict | None = None) -> dict:
         if not self.base_url or self.client is None:
             raise RuntimeError("Qwen provider is not configured")
-        response = await self.client.post("/v1/warmup", json=metadata or {})
+        payload = dict(metadata or {})
+        payload.setdefault("model", self.model_name)
+        response = await self.client.post("/v1/warmup", json=payload)
         response.raise_for_status()
         self.ready = True
         payload = dict(response.json())

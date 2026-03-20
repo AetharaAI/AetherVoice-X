@@ -168,6 +168,7 @@ export function TTSLive() {
   const [batchResponse, setBatchResponse] = useState<TTSResponse | null>(null);
   const [batchEvents, setBatchEvents] = useState<string[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchObservedTotalMs, setBatchObservedTotalMs] = useState<number | null>(null);
 
   const liveModels = useMemo(() => models.filter(isBatchBackedLiveModel), [models]);
   const selectedModel = useMemo(() => liveModels.find((entry) => entry.name === model) ?? null, [liveModels, model]);
@@ -244,6 +245,7 @@ export function TTSLive() {
     setBatchConnectionLabel("idle");
     setBatchSessionId(null);
     setBatchResponse(null);
+    setBatchObservedTotalMs(null);
     setBatchEvents([]);
     setBatchError(null);
   }
@@ -292,8 +294,10 @@ export function TTSLive() {
     try {
       setBatchError(null);
       setBatchResponse(null);
+      setBatchObservedTotalMs(null);
       setBatchConnectionLabel("batch-generating");
       appendBatchEvent(`batch request started · ${bodyText.trim().length} chars`);
+      const startedAt = performance.now();
       const response = await synthesizeText({
         model,
         voice: selectedVoice?.voice_id ?? voiceId,
@@ -317,6 +321,7 @@ export function TTSLive() {
           },
         },
       });
+      setBatchObservedTotalMs(Math.round(performance.now() - startedAt));
       setBatchResponse(response);
       setBatchSessionId(response.session_id);
       setBatchConnectionLabel("batch-ready");
@@ -357,6 +362,11 @@ export function TTSLive() {
     : runtimeTruth?.actual_runtime_conditioning_source ?? "pending";
   const fallbackVoicePath = isBatchBackedLive ? "none" : runtimeTruth?.fallback_voice_path ?? "none";
   const runtimePathUsed = isBatchBackedLive ? modelUsed ?? model : runtimeTruth?.runtime_path_used ?? modelUsed ?? model;
+  const observedFirstChunkMs = isBatchBackedLive ? null : stream.latencies.observedFirstChunkMs;
+  const observedFinalAudioMs = isBatchBackedLive ? batchObservedTotalMs : stream.latencies.observedFinalAudioMs;
+  const backendFirstChunkMs = isBatchBackedLive ? null : stream.latencies.backendFirstChunkMs;
+  const backendInferenceMs = isBatchBackedLive ? batchResponse?.timings?.inference_ms ?? null : stream.latencies.backendInferenceMs;
+  const backendTotalMs = isBatchBackedLive ? batchResponse?.timings?.total_ms ?? null : stream.latencies.backendTotalMs;
   const outputHint = isBatchBackedLive
     ? "This lane is batch-backed for Qwen evaluation. Each send returns one finalized WAV so you can judge voice quality and total latency without claiming realtime chunks."
     : "The finalized WAV appears here after you click End stream. Live audio chunks can still play before that, but the downloadable file is assembled at stream close.";
@@ -394,6 +404,14 @@ export function TTSLive() {
             <div className="status-chip">
               <span className="label">Audio</span>
               <strong>{hasFinalAudio ? "ready" : "pending"}</strong>
+            </div>
+            <div className="status-chip">
+              <span className="label">First chunk</span>
+              <strong>{formatMs(observedFirstChunkMs)}</strong>
+            </div>
+            <div className="status-chip">
+              <span className="label">Final audio</span>
+              <strong>{formatMs(observedFinalAudioMs)}</strong>
             </div>
           </div>
         </section>
@@ -566,6 +584,18 @@ export function TTSLive() {
           <div className="meta-card">
             <span className="label">Runtime path used</span>
             <strong>{runtimePathUsed}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Provider first chunk</span>
+            <strong>{formatMs(backendFirstChunkMs)}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Provider inference</span>
+            <strong>{formatMs(backendInferenceMs)}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Provider total</span>
+            <strong>{formatMs(backendTotalMs)}</strong>
           </div>
           <div className="meta-card">
             <span className="label">Delivery contract</span>

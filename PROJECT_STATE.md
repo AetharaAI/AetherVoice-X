@@ -1,5 +1,14 @@
 # Project State
 
+## 2026-03-19 Qwen Runtime Truth
+
+- `qwen_customvoice` is live as a provider-backed batch lane across `TTS Studio`, `ASR Live` reply-from-final-transcript, and `TTS Live`.
+- `qwen_customvoice_streaming` is live as a sibling incremental lane on `TTS Live`; it must remain additive beside the batch-backed lane, not replace it.
+- `qwen_voice_design` is now integrated as the next studio/provider lane for prompt-driven voice creation and should stay batch-only until it proves out.
+- `TTS Live` now surfaces operator latency truth for Qwen lanes, including observed first chunk, observed final audio, and backend/provider timings when available.
+- The frozen realtime production baseline remains `Voxtral ASR + Kokoro TTS`.
+- Qwen remains the premium voice-quality branch under active evaluation, not the telephony baseline by default.
+
 ## 2026-03-18 Control Truth
 
 - `OpenMOSS` has been decommissioned from the normal compose boot path on `qwentest`.
