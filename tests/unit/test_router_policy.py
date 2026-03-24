@@ -25,3 +25,12 @@ def test_choose_tts_stream_prefers_stream_model():
 def test_normalize_tts_model_name_maps_kokoro_aliases():
     assert normalize_tts_model_name("kokoro") == "kokoro_realtime"
     assert normalize_tts_model_name("kokoro-realtime") == "kokoro_realtime"
+
+
+def test_normalize_tts_model_name_maps_voxtream_aliases():
+    assert normalize_tts_model_name("voxtream") == "voxtream_realtime"
+    assert normalize_tts_model_name("herimor/voxtream") == "voxtream_realtime"
+    assert normalize_tts_model_name("voxtream-realtime") == "voxtream_realtime"
+    assert normalize_tts_model_name("voxtream2") == "voxtream2_realtime"
+    assert normalize_tts_model_name("herimor/voxtream2") == "voxtream2_realtime"
+    assert normalize_tts_model_name("voxtream2-realtime") == "voxtream2_realtime"

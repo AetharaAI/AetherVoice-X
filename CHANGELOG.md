@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-23
+
+- Fast-forwarded local `main` to the current `qwentest` tip so the Qwen lane is no longer stranded behind branch drift.
+- Added the first additive Voxtream experiment seams in the core repo:
+  - new env/settings knobs for separate external `voxtream_realtime` and `voxtream2_realtime` runners
+  - TTS model alias normalization for both `herimor/voxtream` and `herimor/voxtream2`
+  - new adapter registration behind the existing `/v1/tts/stream/*` contract
+  - Studio route catalog visibility and runtime-truth handling for prompt-audio-conditioned streaming
+  - frontend route typing and `TTS Live` selection support without changing the default Kokoro baseline
+  - corrected the example container model paths to the observed mounted layout: `/models/voice/herimor/voxtream*`
+- Tightened the operator-side Voxtream reference voice workflow:
+  - `TTS Live` now treats `voxtream_realtime` and `voxtream2_realtime` as reference-audio routes instead of generic preset-only lanes
+  - added inline reference-voice import on `TTS Live` so reusable WAV assets can be added to the Studio registry without leaving the live console
+  - exposed speaking-rate control on `TTS Live` for Voxtream family routes so runtime cadence tests map to the provider contract
+  - `TTS Studio -> Voice Clone` no longer hardcodes imported references to `chatterbox`; operator can bind them directly to `voxtream_realtime`, `voxtream2_realtime`, or `chatterbox`
+- Kept the frozen production realtime default unchanged:
+  - `DEFAULT_STREAM_TTS_MODEL` remains `kokoro_realtime`
+  - `voxtream_realtime` and `voxtream2_realtime` are scaffolded as experiment lanes, not promoted as the telephony default
 ## 2026-03-14
 
 - Promoted Kokoro into the current default realtime TTS lane:

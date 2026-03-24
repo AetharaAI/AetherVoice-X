@@ -7,6 +7,7 @@ from ..adapters.kokoro_realtime import KokoroRealtimeAdapter
 from ..adapters.qwen_customvoice import QwenCustomVoiceAdapter
 from ..adapters.qwen_customvoice_streaming import QwenCustomVoiceStreamingAdapter
 from ..adapters.qwen_voice_design import QwenVoiceDesignAdapter
+from ..adapters.voxtream_realtime import VoxtreamRealtimeAdapter
 from ..config import get_settings
 
 
@@ -43,6 +44,18 @@ class ModelRegistry:
                 base_url=settings.kokoro_realtime_base_url,
                 model_name=settings.kokoro_model_id,
                 timeout_seconds=settings.kokoro_realtime_timeout_seconds,
+            ),
+            "voxtream_realtime": VoxtreamRealtimeAdapter(
+                name="voxtream_realtime",
+                base_url=settings.voxtream_realtime_base_url,
+                model_name=settings.voxtream_model_id,
+                timeout_seconds=settings.voxtream_realtime_timeout_seconds,
+            ),
+            "voxtream2_realtime": VoxtreamRealtimeAdapter(
+                name="voxtream2_realtime",
+                base_url=settings.voxtream2_realtime_base_url,
+                model_name=settings.voxtream2_model_id,
+                timeout_seconds=settings.voxtream2_realtime_timeout_seconds,
             ),
         }
 
@@ -91,7 +104,17 @@ class ModelRegistry:
                                 else (
                                     ["provider_http", "batch", "voice_design", "prompt_driven_generation"]
                                     if adapter.name == "qwen_voice_design"
-                                    else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                    else (
+                                        (
+                                            ["realtime", "zero_shot_clone", "reference_audio", "full_stream", "prompt_text"]
+                                            if adapter.name == "voxtream_realtime"
+                                            else (
+                                                ["realtime", "zero_shot_clone", "reference_audio", "full_stream", "dynamic_speaking_rate"]
+                                                if adapter.name == "voxtream2_realtime"
+                                                else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                            )
+                                        )
+                                    )
                                 )
                             )
                         )
@@ -100,14 +123,22 @@ class ModelRegistry:
                         5
                         if adapter.name == "kokoro_realtime"
                         else (
-                            10
-                            if adapter.name == "qwen_customvoice_streaming"
-                            else (15 if adapter.name == "qwen_customvoice" else (18 if adapter.name == "qwen_voice_design" else 30))
+                            8
+                            if adapter.name == "voxtream_realtime"
+                            else (
+                                7
+                                if adapter.name == "voxtream2_realtime"
+                                else (
+                                    10
+                                    if adapter.name == "qwen_customvoice_streaming"
+                                    else (15 if adapter.name == "qwen_customvoice" else (18 if adapter.name == "qwen_voice_design" else 30))
+                                )
+                            )
                         )
                     ),
                     "memory_footprint": (
                         "external-service"
-                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
+                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design", "voxtream_realtime", "voxtream2_realtime"}
                         and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
                         else ("external" if adapter.name == "chatterbox" else "external-service")
                     ),

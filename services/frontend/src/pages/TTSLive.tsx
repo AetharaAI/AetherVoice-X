@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchStudioVoices } from "../api/studio";
+import { fetchStudioVoices, importStudioVoice } from "../api/studio";
 import { fetchModels } from "../api/sessions";
 import { synthesizeText } from "../api/tts";
 import { Badge } from "../components/common/Badge";
@@ -129,15 +129,46 @@ function sortVoices(left: StudioVoice, right: StudioVoice) {
     if (voice.runtime_target === "kokoro_realtime") {
       return 0;
     }
-    if (voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming") {
+    if (voice.runtime_target === "voxtream_realtime") {
       return 1;
     }
-    if (voice.runtime_target === "chatterbox") {
+    if (voice.runtime_target === "voxtream2_realtime") {
       return 2;
     }
-    return 3;
+    if (voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming") {
+      return 3;
+    }
+    if (voice.runtime_target === "chatterbox") {
+      return 4;
+    }
+    return 5;
   };
   return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
+}
+
+function usesReferenceVoiceAssets(model: string) {
+  return model === "voxtream_realtime" || model === "voxtream2_realtime" || model === "chatterbox";
+}
+
+function supportsDynamicSpeakingRate(model: string) {
+  return model === "voxtream2_realtime" || model === "voxtream_realtime";
+}
+
+function voiceSelectorLabel(model: string) {
+  return usesReferenceVoiceAssets(model) ? "Reference voice asset" : "Voice preset";
+}
+
+function voiceImportDefaultName(model: string) {
+  if (model === "voxtream2_realtime") {
+    return "Voxtream2 Reference";
+  }
+  if (model === "voxtream_realtime") {
+    return "Voxtream Reference";
+  }
+  if (model === "chatterbox") {
+    return "Chatterbox Reference";
+  }
+  return "Reference Voice";
 }
 
 export function TTSLive() {
@@ -160,6 +191,7 @@ export function TTSLive() {
   const [topK, setTopK] = useState(30);
   const [repetitionPenalty, setRepetitionPenalty] = useState(1.1);
   const [repetitionWindow, setRepetitionWindow] = useState(50);
+  const [speakingRate, setSpeakingRate] = useState(2.0);
   const [bodyText, setBodyText] = useState("A technician is being dispatched to your location now.");
   const [rawDirectives, setRawDirectives] = useState("<agent tone=\"warm\" cadence=\"telephony\" />");
   const [batchSessionArmed, setBatchSessionArmed] = useState(false);
@@ -169,10 +201,19 @@ export function TTSLive() {
   const [batchEvents, setBatchEvents] = useState<string[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchObservedTotalMs, setBatchObservedTotalMs] = useState<number | null>(null);
+  const [referenceImportName, setReferenceImportName] = useState("Voxtream2 Reference");
+  const [referenceImportFile, setReferenceImportFile] = useState<File | null>(null);
+  const [referenceImportTags, setReferenceImportTags] = useState("telephony, reference");
+  const [referenceImportNotes, setReferenceImportNotes] = useState("Imported from TTS Live for fast realtime reference-voice evaluation.");
+  const [referenceImportText, setReferenceImportText] = useState("");
+  const [referenceImportBusy, setReferenceImportBusy] = useState(false);
+  const [referenceImportMessage, setReferenceImportMessage] = useState<string | null>(null);
+  const [referenceImportError, setReferenceImportError] = useState<string | null>(null);
 
   const liveModels = useMemo(() => models.filter(isBatchBackedLiveModel), [models]);
   const selectedModel = useMemo(() => liveModels.find((entry) => entry.name === model) ?? null, [liveModels, model]);
   const isBatchBackedLive = Boolean(selectedModel && !selectedModel.supports_streaming);
+  const referenceVoiceModel = usesReferenceVoiceAssets(model);
   const sortedVoices = useMemo(() => [...voices].sort(sortVoices), [voices]);
   const modelVoices = useMemo(() => {
     if (model.startsWith("qwen_customvoice")) {
@@ -182,6 +223,12 @@ export function TTSLive() {
     }
     if (model === "kokoro_realtime") {
       return sortedVoices.filter((voice) => voice.runtime_target === "kokoro_realtime");
+    }
+    if (model === "voxtream_realtime" || model === "voxtream2_realtime") {
+      return sortedVoices.filter((voice) => Boolean(voice.reference_audio_path));
+    }
+    if (model === "chatterbox") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "chatterbox" || Boolean(voice.reference_audio_path));
     }
     return sortedVoices;
   }, [model, sortedVoices]);
@@ -197,9 +244,10 @@ export function TTSLive() {
       cadence,
       speaking_style: speakingStyle,
       latency_mode: latencyMode,
+      ...(supportsDynamicSpeakingRate(model) ? { speaking_rate: speakingRate } : {}),
       raw_directives: rawDirectives,
     }),
-    [cadence, latencyMode, rawDirectives, selectedVoice?.voice_id, sessionProfile, speakingStyle, tone]
+    [cadence, latencyMode, model, rawDirectives, selectedVoice?.voice_id, sessionProfile, speakingRate, speakingStyle, tone]
   );
   const realtimeTuning = useMemo(
     () => ({
@@ -211,18 +259,34 @@ export function TTSLive() {
       top_k: topK,
       repetition_penalty: repetitionPenalty,
       repetition_window: repetitionWindow,
+      ...(supportsDynamicSpeakingRate(model) ? { speaking_rate: speakingRate } : {}),
     }),
-    [decodeChunkFrames, decodeOverlapFrames, prefillTextLen, repetitionPenalty, repetitionWindow, temperature, topK, topP]
+    [decodeChunkFrames, decodeOverlapFrames, model, prefillTextLen, repetitionPenalty, repetitionWindow, speakingRate, temperature, topK, topP]
   );
+
+  async function refreshVoices() {
+    const payload = await fetchStudioVoices();
+    setVoices(payload);
+    return payload;
+  }
 
   useEffect(() => {
     fetchModels()
       .then((payload) => setModels(payload))
       .catch(() => setModels([]));
-    fetchStudioVoices()
-      .then((payload) => setVoices(payload))
+    refreshVoices()
+      .then(() => undefined)
       .catch(() => setVoices([]));
   }, []);
+
+  useEffect(() => {
+    if (!referenceVoiceModel) {
+      return;
+    }
+    setReferenceImportName((current) => (current.trim() ? current : voiceImportDefaultName(model)));
+    setReferenceImportMessage(null);
+    setReferenceImportError(null);
+  }, [model, referenceVoiceModel]);
 
   useEffect(() => {
     if (liveModels.length > 0 && !liveModels.some((entry) => entry.name === model)) {
@@ -248,6 +312,41 @@ export function TTSLive() {
     setBatchObservedTotalMs(null);
     setBatchEvents([]);
     setBatchError(null);
+  }
+
+  async function handleReferenceImport() {
+    if (!referenceImportFile) {
+      setReferenceImportError("Choose a reference WAV before importing.");
+      return;
+    }
+    setReferenceImportBusy(true);
+    setReferenceImportError(null);
+    setReferenceImportMessage(null);
+    try {
+      const form = new FormData();
+      form.set("file", referenceImportFile);
+      form.set("display_name", referenceImportName.trim() || voiceImportDefaultName(model));
+      form.set("source_model", "imported");
+      form.set("runtime_target", model);
+      form.set("voice_type", "imported");
+      form.set("notes", referenceImportNotes.trim());
+      form.set("tags", referenceImportTags.trim());
+      if (referenceImportText.trim()) {
+        form.set("reference_text", referenceImportText.trim());
+      }
+      const voice = await importStudioVoice(form);
+      const nextVoices = await refreshVoices();
+      setReferenceImportMessage(`Imported ${voice.display_name} into the shared voice library.`);
+      setReferenceImportFile(null);
+      setVoiceId(voice.voice_id);
+      if (!nextVoices.some((entry) => entry.voice_id === voice.voice_id)) {
+        setReferenceImportError(`Imported ${voice.display_name}, but the live voice list did not refresh yet.`);
+      }
+    } catch (err) {
+      setReferenceImportError((err as Error).message);
+    } finally {
+      setReferenceImportBusy(false);
+    }
   }
 
   async function handleStart() {
@@ -436,7 +535,7 @@ export function TTSLive() {
             </p>
           </div>
           <div className="field-group">
-            <label htmlFor="tts-live-voice">Voice preset</label>
+            <label htmlFor="tts-live-voice">{voiceSelectorLabel(model)}</label>
             <select id="tts-live-voice" value={selectedVoice?.voice_id ?? voiceId} onChange={(event) => setVoiceId(event.target.value)} disabled={sessionOpen}>
               {modelVoices.length ? (
                 modelVoices.map((voice) => (
@@ -453,11 +552,15 @@ export function TTSLive() {
                 ? "Qwen voices here are the seeded built-in CustomVoice presets. Use this lane to compare voice quality and total generation time before moving into telephony harness tests."
                 : model.startsWith("qwen_customvoice")
                   ? "Qwen streaming uses the same seeded CustomVoice preset list. This lane is for first-audio and chunk-latency judgment against the batch-backed Qwen probe."
+                : runtimePathUsed === "voxtream_realtime"
+                  ? "Original Voxtream expects a bound reference-audio asset and benefits from reference text. Pick an imported or generated voice with a real WAV asset before judging telephony realism."
+                : runtimePathUsed === "voxtream2_realtime"
+                  ? "Voxtream2 expects a bound reference-audio asset for zero-shot prompting and adds dynamic speaking-rate control. Pick an imported or generated voice with a real WAV asset before judging telephony realism."
                 : runtimePathUsed === "kokoro_realtime"
                   ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
                   : runtimeTruth?.conditioning_active
                     ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
-                    : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
+                  : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
             </p>
           </div>
           <div className="field-group">
@@ -468,6 +571,82 @@ export function TTSLive() {
             <p className="field-hint">Live testing stays pinned to the model-native sample rate for now.</p>
           </div>
         </div>
+        {referenceVoiceModel ? (
+          <details className="accordion" open>
+            <summary>Reference voice library</summary>
+            <div className="accordion-body">
+              <div className="control-grid">
+                <div className="field-group">
+                  <label htmlFor="tts-live-reference-file">Reference WAV</label>
+                  <input
+                    id="tts-live-reference-file"
+                    type="file"
+                    accept="audio/wav,audio/*"
+                    onChange={(event) => setReferenceImportFile(event.target.files?.[0] ?? null)}
+                    disabled={sessionOpen || referenceImportBusy}
+                  />
+                  <p className="field-hint">Imports a reusable voice asset into the Studio registry so Voxtream can clone from a dropdown instead of a raw VM path.</p>
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-live-reference-name">Asset name</label>
+                  <input
+                    id="tts-live-reference-name"
+                    value={referenceImportName}
+                    onChange={(event) => setReferenceImportName(event.target.value)}
+                    placeholder={voiceImportDefaultName(model)}
+                    disabled={sessionOpen || referenceImportBusy}
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-live-reference-tags">Tags</label>
+                  <input
+                    id="tts-live-reference-tags"
+                    value={referenceImportTags}
+                    onChange={(event) => setReferenceImportTags(event.target.value)}
+                    placeholder="telephony, dispatch, male"
+                    disabled={sessionOpen || referenceImportBusy}
+                  />
+                </div>
+              </div>
+              <div className="control-grid">
+                <div className="field-group">
+                  <label htmlFor="tts-live-reference-text">Reference transcript</label>
+                  <textarea
+                    id="tts-live-reference-text"
+                    value={referenceImportText}
+                    onChange={(event) => setReferenceImportText(event.target.value)}
+                    rows={3}
+                    placeholder={model === "voxtream_realtime" ? "Optional but recommended for original Voxtream." : "Optional. Voxtream2 can run without it, but save it when you have it."}
+                    disabled={sessionOpen || referenceImportBusy}
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="tts-live-reference-notes">Operator notes</label>
+                  <textarea
+                    id="tts-live-reference-notes"
+                    value={referenceImportNotes}
+                    onChange={(event) => setReferenceImportNotes(event.target.value)}
+                    rows={3}
+                    disabled={sessionOpen || referenceImportBusy}
+                  />
+                </div>
+              </div>
+              <div className="toolbar">
+                <button onClick={() => void handleReferenceImport()} disabled={sessionOpen || referenceImportBusy}>
+                  {referenceImportBusy ? "Importing reference..." : "Import reference into library"}
+                </button>
+                <Badge value={`${modelVoices.length} assets`} tone={modelVoices.length ? "good" : "warn"} />
+              </div>
+              {selectedVoice?.reference_audio_path ? (
+                <p className="field-hint">
+                  Active reference asset: <code className="inline-code">{selectedVoice.reference_audio_path}</code>
+                </p>
+              ) : null}
+              {referenceImportMessage ? <p className="muted">{referenceImportMessage}</p> : null}
+              {referenceImportError ? <p className="error-text">{referenceImportError}</p> : null}
+            </div>
+          </details>
+        ) : null}
         <div className="control-grid">
           <div className="field-group">
             <label htmlFor="tts-live-profile">Session profile</label>
@@ -548,11 +727,28 @@ export function TTSLive() {
                 <label htmlFor="tts-live-repetition-window">Repetition window</label>
                 <input id="tts-live-repetition-window" type="number" min={1} max={512} step={1} value={repetitionWindow} onChange={(event) => setRepetitionWindow(Number(event.target.value))} disabled={sessionOpen} />
               </div>
+              {supportsDynamicSpeakingRate(model) ? (
+                <div className="field-group">
+                  <label htmlFor="tts-live-speaking-rate">Speaking rate</label>
+                  <input
+                    id="tts-live-speaking-rate"
+                    type="number"
+                    min={0.5}
+                    max={5}
+                    step={0.1}
+                    value={speakingRate}
+                    onChange={(event) => setSpeakingRate(Number(event.target.value))}
+                    disabled={sessionOpen}
+                  />
+                </div>
+              ) : null}
             </div>
             <p className="field-hint">
               {isBatchBackedLive
                 ? "These controls are preserved in metadata for the Qwen provider. This lane is for latency and voice evaluation, not true chunked streaming yet."
-                : "These controls apply at stream start for the current session only. Use them for immediate live quality tests without changing backend env defaults."}
+                : supportsDynamicSpeakingRate(model)
+                  ? "These controls apply at stream start for the current session only. Voxtream routes also read the speaking-rate knob here, so you can judge cadence and latency without changing provider env defaults."
+                  : "These controls apply at stream start for the current session only. Use them for immediate live quality tests without changing backend env defaults."}
             </p>
           </div>
         </details>
@@ -572,6 +768,10 @@ export function TTSLive() {
           <div className="meta-card">
             <span className="label">Requested preset</span>
             <strong>{requestedPreset}</strong>
+          </div>
+          <div className="meta-card">
+            <span className="label">Reference path</span>
+            <strong className="meta-value-wrap">{selectedVoice?.reference_audio_path ?? "none"}</strong>
           </div>
           <div className="meta-card">
             <span className="label">Runtime conditioning</span>

@@ -27,6 +27,14 @@ TTS_MODEL_ALIASES = {
     "kokoro-realtime": "kokoro_realtime",
     "kokoro": "kokoro_realtime",
     "hexgrad/kokoro-82m": "kokoro_realtime",
+    "voxtream_realtime": "voxtream_realtime",
+    "voxtream-realtime": "voxtream_realtime",
+    "voxtream": "voxtream_realtime",
+    "herimor/voxtream": "voxtream_realtime",
+    "voxtream2_realtime": "voxtream2_realtime",
+    "voxtream2-realtime": "voxtream2_realtime",
+    "voxtream2": "voxtream2_realtime",
+    "herimor/voxtream2": "voxtream2_realtime",
 }
 
 

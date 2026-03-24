@@ -22,9 +22,15 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
         kokoro_default_voice="af_sky",
         kokoro_model_path=str(model_root / "audio" / "kokoro"),
         kokoro_realtime_base_url=None,
+        voxtream_model_path=str(model_root / "audio" / "voxtream"),
+        voxtream_realtime_base_url=None,
+        voxtream2_model_path=str(model_root / "audio" / "voxtream2"),
+        voxtream2_realtime_base_url=None,
         host_model_root=str(model_root),
         aether_model_root="/models",
         chatterbox_base_url=None,
+        qwen_provider_base_url=None,
+        qwen_provider_default_voice="Ryan",
     )
 
 
@@ -122,3 +128,54 @@ def test_kokoro_route_and_runtime_truth_use_builtin_voice_defaults(tmp_path: Pat
     assert runtime["selected_voice_id"] == "af_sky"
     assert runtime["actual_runtime_conditioning_source"] == "af_sky"
     assert runtime["live_chunk_source_route"] == "kokoro_realtime.sentence_stream"
+
+
+def test_voxtream_route_and_runtime_truth_use_reference_audio_assets(tmp_path: Path) -> None:
+    original_root = tmp_path / "models" / "audio" / "voxtream"
+    original_root.mkdir(parents=True)
+    v2_root = tmp_path / "models" / "audio" / "voxtream2"
+    v2_root.mkdir(parents=True)
+    service = StudioService(_settings(tmp_path))
+    imported = service.import_voice_asset(
+        tenant_id="tenant_1",
+        filename="reference.wav",
+        payload=b"RIFFreference",
+        display_name="Dispatch Clone",
+        source_model="imported",
+        runtime_target="voxtream_realtime",
+        notes="reference ready",
+        tags=["telephony", "voxtream"],
+    )
+
+    routes = {route.name: route for route in service.overview("tenant_1").routes}
+    assert "voxtream_realtime" in routes
+    assert "voxtream2_realtime" in routes
+    assert routes["voxtream_realtime"].present_on_disk is True
+    assert routes["voxtream2_realtime"].present_on_disk is True
+
+    runtime = service.resolve_stream_runtime_truth(
+        "tenant_1",
+        requested_route="voxtream_realtime",
+        runtime_path_used="voxtream_realtime",
+        voice_id=imported.voice_id,
+        metadata={"source": "test"},
+        fallback_route_used=None,
+    )
+
+    assert runtime["selected_voice_id"] == imported.voice_id
+    assert runtime["resolved_conditioning_asset"] == imported.reference_audio_path
+    assert runtime["actual_runtime_conditioning_source"] == imported.reference_audio_path
+    assert runtime["live_chunk_source_route"] == "voxtream_realtime.full_stream"
+
+    runtime_v2 = service.resolve_stream_runtime_truth(
+        "tenant_1",
+        requested_route="voxtream2_realtime",
+        runtime_path_used="voxtream2_realtime",
+        voice_id=imported.voice_id,
+        metadata={"source": "test"},
+        fallback_route_used=None,
+    )
+
+    assert runtime_v2["resolved_conditioning_asset"] == imported.reference_audio_path
+    assert runtime_v2["actual_runtime_conditioning_source"] == imported.reference_audio_path
+    assert runtime_v2["live_chunk_source_route"] == "voxtream2_realtime.full_stream"

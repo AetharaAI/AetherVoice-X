@@ -5,7 +5,10 @@
 - `qwen_customvoice` is live as a provider-backed batch lane across `TTS Studio`, `ASR Live` reply-from-final-transcript, and `TTS Live`.
 - `qwen_customvoice_streaming` is live as a sibling incremental lane on `TTS Live`; it must remain additive beside the batch-backed lane, not replace it.
 - `qwen_voice_design` is now integrated as the next studio/provider lane for prompt-driven voice creation and should stay batch-only until it proves out.
+- `voxtream_realtime` and `voxtream2_realtime` are now wired in the core repo as external-runner experiment lanes behind the existing stream contract; neither is the production baseline until runtime proof says otherwise.
+- `voxtream2_realtime` now has external runtime proof in the sibling `voxtream-experiments` repo: warmup and prompt-audio-conditioned synthesis both completed successfully against real reference WAV assets on the L4 node.
 - `TTS Live` now surfaces operator latency truth for Qwen lanes, including observed first chunk, observed final audio, and backend/provider timings when available.
+- `TTS Live` now exposes a real reference-voice workflow for Voxtream family routes: Studio-managed asset dropdowns, inline reference import, and provider-facing speaking-rate control.
 - The frozen realtime production baseline remains `Voxtral ASR + Kokoro TTS`.
 - Qwen remains the premium voice-quality branch under active evaluation, not the telephony baseline by default.
 
@@ -92,6 +95,14 @@ This section is the current operational truth and takes precedence over older MO
   - adapter-driven realtime TTS lane is now the default live reply path
   - dedicated `kokoro` sidecar is healthy and integrated behind the existing `/v1/tts/stream/*` contract
   - preset-voice route has been verified in the UI with clean runtime truth and low-latency chunk return
+- `voxtream_realtime`
+  - core repo adapter, env, alias, and Studio route seam are now scaffolded for the original model branch
+  - intended integration shape is an external prompt-audio-conditioned runner on the shared mesh
+  - current status is staged only; no runtime proof yet in this repo
+- `voxtream2_realtime`
+  - core repo adapter, env, alias, and Studio route seam are now scaffolded for the newer model branch
+  - intended integration shape is an external prompt-audio-conditioned runner on the shared mesh
+  - runtime proof now exists in the sibling `voxtream-experiments` repo; core repo remains additive and non-default until operator latency and telephony harness value are proven
 - `chatterbox`
   - batch TTS: working via HTTP passthrough
   - current fallback lane for batch generation inside the new studio shell: working

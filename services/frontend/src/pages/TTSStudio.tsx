@@ -100,6 +100,10 @@ function preferredDialogueRoute(routes: StudioRouteDescriptor[]) {
   );
 }
 
+function isReferenceVoiceRoute(route: StudioRouteDescriptor) {
+  return route.name === "voxtream_realtime" || route.name === "voxtream2_realtime" || route.name === "chatterbox";
+}
+
 function buildPresetPreviewText(preset: ExamplePreset) {
   return `AetherPro voice design preview for ${preset.title}. Please confirm the line is stable and operator-ready.`;
 }
@@ -126,6 +130,8 @@ export function TTSStudio() {
   const [cloneFile, setCloneFile] = useState<File | null>(null);
   const [cloneTags, setCloneTags] = useState("telephony, support");
   const [cloneNotes, setCloneNotes] = useState("Imported reference voice for future studio voice-family testing.");
+  const [cloneRuntimeTarget, setCloneRuntimeTarget] = useState<StudioRouteDescriptor["name"]>("voxtream2_realtime");
+  const [cloneReferenceText, setCloneReferenceText] = useState("");
   const [designVoiceId, setDesignVoiceId] = useState<string | null>(null);
   const [designName, setDesignName] = useState("Warm Dispatcher");
   const [designPrompt, setDesignPrompt] = useState("Warm female dispatcher voice with calm authority, clear articulation, and telephony-friendly pacing.");
@@ -155,6 +161,7 @@ export function TTSStudio() {
     [routes]
   );
   const selectedRoute = routes.find((route) => route.name === routeTarget) ?? null;
+  const referenceVoiceRoutes = useMemo(() => routes.filter(isReferenceVoiceRoute), [routes]);
   const selectedVoice = voices.find((voice) => voice.voice_id === selectedVoiceId) ?? null;
   const filteredVoices = useMemo(() => {
     const term = voiceFilter.trim().toLowerCase();
@@ -188,6 +195,9 @@ export function TTSStudio() {
     }
     if (!payload.routes.some((route) => route.name === designRoute && (route.name === "qwen_customvoice" || route.name === "qwen_voice_design" || route.name === "chatterbox" || route.mode === "voice-design"))) {
       setDesignRoute(preferredVoiceDesignRoute(payload.routes));
+    }
+    if (!payload.routes.some((route) => route.name === cloneRuntimeTarget && isReferenceVoiceRoute(route))) {
+      setCloneRuntimeTarget(payload.routes.find((route) => route.name === "voxtream2_realtime")?.name ?? payload.routes.find(isReferenceVoiceRoute)?.name ?? "chatterbox");
     }
     setProvider(payload.routing.provider);
     setSelectedProviderModel(payload.routing.model ?? "");
@@ -330,9 +340,12 @@ export function TTSStudio() {
       form.set("file", cloneFile);
       form.set("display_name", cloneName);
       form.set("source_model", "imported");
-      form.set("runtime_target", "chatterbox");
+      form.set("runtime_target", cloneRuntimeTarget);
       form.set("notes", cloneNotes);
       form.set("tags", cloneTags);
+      if (cloneReferenceText.trim()) {
+        form.set("reference_text", cloneReferenceText.trim());
+      }
       const voice = await importStudioVoice(form);
       setMessage(`Reference voice imported as ${voice.display_name}.`);
       await refreshOverview();
@@ -607,7 +620,24 @@ export function TTSStudio() {
                 <label htmlFor="voice-clone-tags">Tags</label>
                 <input id="voice-clone-tags" value={cloneTags} onChange={(event) => setCloneTags(event.target.value)} placeholder="telephony, support, clone" />
               </div>
+              <div className="field-group">
+                <label htmlFor="voice-clone-runtime-target">Runtime target</label>
+                <select id="voice-clone-runtime-target" value={cloneRuntimeTarget} onChange={(event) => setCloneRuntimeTarget(event.target.value as StudioRouteDescriptor["name"])}>
+                  {referenceVoiceRoutes.map((route) => (
+                    <option key={route.name} value={route.name}>
+                      {routeLabel(route)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <details className="accordion" open>
+              <summary>Reference transcript</summary>
+              <div className="accordion-body">
+                <textarea value={cloneReferenceText} onChange={(event) => setCloneReferenceText(event.target.value)} rows={4} />
+                <p className="field-hint">Save the transcript when you have it. Original Voxtream benefits from prompt text; Voxtream2 treats it as optional but still useful provenance.</p>
+              </div>
+            </details>
             <details className="accordion" open>
               <summary>Operator notes</summary>
               <div className="accordion-body">

@@ -81,7 +81,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
-ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "voxtream_realtime", "voxtream2_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
 
 
 class StudioService:
@@ -453,6 +453,28 @@ class StudioService:
                 fallback_target="chatterbox",
             ),
             self._route_descriptor(
+                name="voxtream_realtime",
+                label="Voxtream Realtime",
+                mode="stream",
+                model_path=self.settings.voxtream_model_path,
+                requires_endpoint=True,
+                endpoint=self.settings.voxtream_realtime_base_url,
+                runtime_wired=bool(self.settings.voxtream_realtime_base_url),
+                notes="Experimental original Voxtream lane for zero-shot full-stream replies. This branch expects prompt text alongside prompt audio and should stay additive behind an external runner.",
+                fallback_target="kokoro_realtime",
+            ),
+            self._route_descriptor(
+                name="voxtream2_realtime",
+                label="Voxtream2 Realtime",
+                mode="stream",
+                model_path=self.settings.voxtream2_model_path,
+                requires_endpoint=True,
+                endpoint=self.settings.voxtream2_realtime_base_url,
+                runtime_wired=bool(self.settings.voxtream2_realtime_base_url),
+                notes="Experimental Voxtream2 lane for zero-shot full-stream replies with dynamic speaking-rate control. Treat this as the likely faster successor, but keep runtime proof ahead of paper claims.",
+                fallback_target="kokoro_realtime",
+            ),
+            self._route_descriptor(
                 name="qwen_customvoice_streaming",
                 label="Qwen CustomVoice Streaming",
                 mode="stream",
@@ -515,6 +537,30 @@ class StudioService:
             live_chunk_source_route = "kokoro_realtime.sentence_stream"
             final_artifact_source_route = "kokoro_realtime.final_concat"
             notes.append("Kokoro uses built-in preset voices and does not require reference-audio conditioning.")
+        elif runtime_path_used == "voxtream_realtime":
+            resolved_asset = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else None
+            conditioning_source = resolved_asset or "voxtream_missing_reference"
+            conditioning_active = bool(resolved_asset)
+            fallback_voice_path = resolved_asset or ""
+            live_chunk_source_route = "voxtream_realtime.full_stream"
+            final_artifact_source_route = "voxtream_realtime.stream_finalize"
+            if resolved_asset:
+                notes.append("Voxtream uses the selected reference-audio asset as the zero-shot prompt for full-stream synthesis.")
+                notes.append("The original Voxtream branch benefits from prompt text; bind a voice with usable reference text when possible.")
+            else:
+                notes.append("Voxtream was selected without a usable reference-audio asset; the external runner should fail loudly or fall back rather than pretend conditioning succeeded.")
+        elif runtime_path_used == "voxtream2_realtime":
+            resolved_asset = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else None
+            conditioning_source = resolved_asset or "voxtream2_missing_reference"
+            conditioning_active = bool(resolved_asset)
+            fallback_voice_path = resolved_asset or ""
+            live_chunk_source_route = "voxtream2_realtime.full_stream"
+            final_artifact_source_route = "voxtream2_realtime.stream_finalize"
+            if resolved_asset:
+                notes.append("Voxtream2 uses the selected reference-audio asset as the zero-shot prompt for full-stream synthesis.")
+                notes.append("Voxtream2 adds dynamic speaking-rate control and prompt-text masking, so reference text is optional rather than mandatory.")
+            else:
+                notes.append("Voxtream2 was selected without a usable reference-audio asset; the external runner should fail loudly or fall back rather than pretend conditioning succeeded.")
         elif runtime_path_used.startswith("qwen_customvoice"):
             if selected_voice is None or not str(selected_voice.voice_id).startswith("qwen_"):
                 selected_voice = voices.get(f"qwen_{self.settings.qwen_provider_default_voice.lower()}") or selected_voice
