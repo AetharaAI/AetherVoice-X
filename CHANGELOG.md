@@ -1,6 +1,16 @@
 # Changelog
 
+## 2026-03-24
+
+- Fixed VoxStream2 stream/start 400 Bad Request on the live lane:
+  - Root cause: `streaming_service` called `resolve_voice_metadata` with `include_audio_bytes=False` for Voxtream routes; the adapter sent only a filesystem path (`/tmp/aether-storage/...`) which is container-local to the TTS service and unreachable by the `voxtream2-provider` container
+  - Fix: `streaming_service.start()` now detects `voxtream_realtime` / `voxtream2_realtime` adapters and passes `include_audio_bytes=True`, so the reference WAV is embedded as base64 and travels cross-container in the `prompt_audio_b64` field
+  - The existing `_start_payload` in `voxtream_realtime.py` already wired `prompt_audio_b64` — no adapter-side change needed
+  - Added 6 unit tests in `test_voxtream_adapter_stream_start.py` covering adapter payload construction and the streaming service embedding behavior
+  - Frozen production default (`kokoro_realtime`) unaffected; `include_audio_bytes` remains `False` for all non-Voxtream routes
+
 ## 2026-03-23
+
 
 - Fast-forwarded local `main` to the current `qwentest` tip so the Qwen lane is no longer stranded behind branch drift.
 - Added the first additive Voxtream experiment seams in the core repo:

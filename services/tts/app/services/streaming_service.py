@@ -100,7 +100,13 @@ class StreamingService:
             adapter = fallback
             adapter_configured = getattr(adapter, "configured", False) or getattr(adapter, "ready", False)
             fallback_route_used = adapter.name if adapter.name != request.model else None
-        prepared_request = self._prepare_stream_request(request, include_audio_bytes=False)
+        # Voxtream provider runs in a separate container with no shared filesystem.
+        # The TTS studio stores voice-asset WAVs at LOCAL_STORAGE_ROOT which is
+        # container-local (/tmp/aether-storage). Embedding the reference bytes as
+        # base64 lets the provider decode them to a temp file without any shared mount.
+        _voxtream_routes = {"voxtream_realtime", "voxtream2_realtime"}
+        include_audio_bytes = adapter.name in _voxtream_routes
+        prepared_request = self._prepare_stream_request(request, include_audio_bytes=include_audio_bytes)
         if adapter.supports_streaming and adapter_configured:
             try:
                 stream_session = await adapter.start_stream(prepared_request)

@@ -102,7 +102,10 @@ This section is the current operational truth and takes precedence over older MO
 - `voxtream2_realtime`
   - core repo adapter, env, alias, and Studio route seam are now scaffolded for the newer model branch
   - intended integration shape is an external prompt-audio-conditioned runner on the shared mesh
-  - runtime proof now exists in the sibling `voxtream-experiments` repo; core repo remains additive and non-default until operator latency and telephony harness value are proven
+  - runtime proof exists in the sibling `voxtream-experiments` repo: warmup, batch synthesis, and six curl sessions all verified on the L4 node
+  - **stream/start handshake is now fixed**: TTS streaming service embeds the reference WAV as base64 (`include_audio_bytes=True`) for Voxtream routes so bytes travel cross-container without requiring a shared filesystem mount
+  - the `voxtream2-provider` container can now accept `prompt_audio_b64` and decode it to a temp file internally
+  - reference voice assets imported via TTS Live will now correctly condition the stream on first use
 - `chatterbox`
   - batch TTS: working via HTTP passthrough
   - current fallback lane for batch generation inside the new studio shell: working
