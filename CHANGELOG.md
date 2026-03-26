@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-26
+
+- Hardened Voxtream stream/start model contract against `400 Unsupported model`:
+  - `VoxtreamRealtimeAdapter.start_stream()` now posts model alias (`voxtream_realtime` / `voxtream2_realtime`) instead of HF model ID (`herimor/voxtream*`)
+  - this aligns the core repo with external provider runtimes that key on route alias
+- Added regression test coverage in `tests/unit/test_voxtream_adapter_stream_start.py`:
+  - verifies stream/start posts route alias even when adapter `model_name` is an HF model ID
+- Hardened Studio voice persistence and cross-service local artifact access:
+  - mounted shared named volume `tts-local-storage` at `LOCAL_STORAGE_ROOT` for both `gateway` and `tts` services
+  - imported voice assets (`tts-studio/voice-assets`) and voice registry (`tts-studio/voice-registry.json`) now persist across container recreation
+  - `scripts/seed_voxtream_voices.py` / `.sh` remain one-time bulk bootstrap helpers, not required per restart
+
 ## 2026-03-24
 
 - Fixed VoxStream2 stream/start 400 Bad Request on the live lane:

@@ -91,7 +91,7 @@ class VoxtreamRealtimeAdapter(BaseTTSAdapter):
             raise RuntimeError("Voxtream realtime upstream is not configured")
         response = await self.client.post(
             "/v1/stream/start",
-            json=self._start_payload(request, model_name=self.model_name),
+            json=self._start_payload(request, model_name=self.name),
         )
         response.raise_for_status()
         payload = response.json()

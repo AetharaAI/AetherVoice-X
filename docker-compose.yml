@@ -24,6 +24,7 @@ services:
     volumes:
       - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
       - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+      - tts-local-storage:${LOCAL_STORAGE_ROOT:-/tmp/aether-storage}
 
   asr:
     build:
@@ -186,6 +187,7 @@ services:
     volumes:
       - ${HOST_MODEL_ROOT:-/mnt/aetherpro/models}:${AETHER_MODEL_ROOT:-/models}:ro
       - ${HOST_HF_CACHE_ROOT:-/mnt/aetherpro/hf-cache}:${HF_HOME:-/hf-cache}
+      - tts-local-storage:${LOCAL_STORAGE_ROOT:-/tmp/aether-storage}
     networks:
       - default
       - qwen_provider_mesh
@@ -276,6 +278,7 @@ services:
 volumes:
   postgres-data:
   minio-data:
+  tts-local-storage:
 
 networks:
   qwen_provider_mesh:

@@ -1,5 +1,13 @@
 # Project State
 
+## 2026-03-26 Voxtream stream/start contract truth
+
+- `voxtream2_realtime` stream/start now sends route alias (`voxtream2_realtime`) instead of HF model ID (`herimor/voxtream2`) to the external provider.
+- This removes a real `400 Unsupported model` failure mode in provider runtimes that validate alias-only model contracts.
+- Existing Voxtream reference-audio transport truth remains in place (`include_audio_bytes=True` on Voxtream routes so `prompt_audio_b64` can cross containers).
+- Studio voice assets and registry persistence are now backed by a shared named Docker volume mounted at `LOCAL_STORAGE_ROOT` on both `gateway` and `tts`.
+- Operational consequence: imported reference voices survive `tts`/`gateway` container recreation, so `seed_voxtream_voices.*` is a bulk bootstrap convenience, not a recurring runtime requirement.
+
 ## 2026-03-19 Qwen Runtime Truth
 
 - `qwen_customvoice` is live as a provider-backed batch lane across `TTS Studio`, `ASR Live` reply-from-final-transcript, and `TTS Live`.

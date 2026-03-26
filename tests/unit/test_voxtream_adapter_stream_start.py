@@ -299,3 +299,43 @@ def test_streaming_service_does_not_embed_audio_bytes_for_kokoro() -> None:
     assert "reference_audio_b64" not in extra, (
         "Audio bytes must not be embedded for kokoro_realtime — unnecessary payload bloat"
     )
+
+
+def test_start_stream_posts_route_alias_not_hf_model_id() -> None:
+    """
+    Regression guard: provider runtime validates model alias (voxtream2_realtime),
+    not HF model ID (herimor/voxtream2).
+    """
+
+    class FakeResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self._payload
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.last_json: dict | None = None
+
+        async def post(self, _path: str, json: dict) -> FakeResponse:
+            self.last_json = json
+            return FakeResponse({"session_id": json["session_id"], "model": json["model"], "expires_in_seconds": 3600})
+
+    adapter = VoxtreamRealtimeAdapter.__new__(VoxtreamRealtimeAdapter)
+    adapter.name = "voxtream2_realtime"
+    adapter.model_name = "herimor/voxtream2"
+    adapter.base_url = "http://voxtream2-provider:8075"
+    adapter.timeout_seconds = 120.0
+    adapter.client = FakeClient()
+    adapter.configured = True
+    adapter.ready = True
+
+    req = _request(model="voxtream2_realtime")
+    asyncio.run(adapter.start_stream(req))
+
+    assert adapter.client.last_json is not None
+    assert adapter.client.last_json["model"] == "voxtream2_realtime"
