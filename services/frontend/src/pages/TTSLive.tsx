@@ -224,8 +224,11 @@ export function TTSLive() {
     if (model === "kokoro_realtime") {
       return sortedVoices.filter((voice) => voice.runtime_target === "kokoro_realtime");
     }
-    if (model === "voxtream_realtime" || model === "voxtream2_realtime") {
-      return sortedVoices.filter((voice) => Boolean(voice.reference_audio_path));
+    if (model === "voxtream_realtime") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "voxtream_realtime" && Boolean(voice.reference_audio_path));
+    }
+    if (model === "voxtream2_realtime") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "voxtream2_realtime" && Boolean(voice.reference_audio_path));
     }
     if (model === "chatterbox") {
       return sortedVoices.filter((voice) => voice.runtime_target === "chatterbox" || Boolean(voice.reference_audio_path));

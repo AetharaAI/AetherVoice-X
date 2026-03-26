@@ -45,6 +45,11 @@ async def import_voice(
     runtime_target: str = Form(...),
     notes: str | None = Form(default=None),
     tags: str = Form(default=""),
+    voice_id: str | None = Form(default=None),
+    voice_type: str | None = Form(default=None),
+    reference_text: str | None = Form(default=None),
+    generation_prompt: str | None = Form(default=None),
+    default_params: str | None = Form(default=None),
     auth: AuthContext = Depends(get_auth_context),
     tts_client: TTSClient = Depends(get_tts_client),
 ) -> dict:
@@ -56,6 +61,11 @@ async def import_voice(
             "runtime_target": runtime_target,
             "notes": notes or "",
             "tags": tags,
+            "voice_id": voice_id,
+            "voice_type": voice_type,
+            "reference_text": reference_text,
+            "generation_prompt": generation_prompt,
+            "default_params": default_params,
         },
         {
             "file": (
