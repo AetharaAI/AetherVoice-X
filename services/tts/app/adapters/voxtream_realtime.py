@@ -124,6 +124,18 @@ class VoxtreamRealtimeAdapter(BaseTTSAdapter):
             raise RuntimeError("Voxtream realtime upstream returned an invalid completion payload")
         return events
 
+    async def warmup(self, metadata: dict | None = None) -> dict:
+        if not self.base_url or self.client is None:
+            raise RuntimeError("Voxtream realtime upstream is not configured")
+        payload = dict(metadata or {})
+        payload.setdefault("model", self.name)
+        response = await self.client.post("/v1/warmup", json=payload)
+        response.raise_for_status()
+        self.ready = True
+        result = dict(response.json())
+        result.setdefault("route", self.name)
+        return result
+
     async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
         if not self.base_url or self.client is None:
             raise RuntimeError("Voxtream realtime upstream is not configured")

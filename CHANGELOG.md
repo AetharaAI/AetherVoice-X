@@ -2,6 +2,20 @@
 
 ## 2026-03-26
 
+- Added real Voxtream route warmup behavior:
+  - `VoxtreamRealtimeAdapter.warmup()` now calls provider `POST /v1/warmup` with the route alias model and tenant metadata
+  - `POST /api/v1/tts/studio/routes/voxtream2_realtime/warmup` now returns provider warmup truth instead of base-adapter `status=noop`
+  - added regression test coverage in `tests/unit/test_voxtream_adapter_stream_start.py`
+- Added `Warm up` control on `TTS Live` for Voxtream routes:
+  - button appears for `voxtream_realtime` and `voxtream2_realtime`
+  - operator sees compact warmup status/timing inline in the page
+  - no shell curl required for routine first-load warmup after recreate/restart
+- Updated `VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-19.md` with:
+  - Voxtream2 ownership and lane truth
+  - gateway-first warmup curl with `jq` projection
+  - provider-direct warmup command
+  - speaking-rate contract notes for live integration
+
 - Hardened Voxtream stream/start model contract against `400 Unsupported model`:
   - `VoxtreamRealtimeAdapter.start_stream()` now posts model alias (`voxtream_realtime` / `voxtream2_realtime`) instead of HF model ID (`herimor/voxtream*`)
   - this aligns the core repo with external provider runtimes that key on route alias
@@ -11,6 +25,9 @@
   - mounted shared named volume `tts-local-storage` at `LOCAL_STORAGE_ROOT` for both `gateway` and `tts` services
   - imported voice assets (`tts-studio/voice-assets`) and voice registry (`tts-studio/voice-registry.json`) now persist across container recreation
   - `scripts/seed_voxtream_voices.py` / `.sh` remain one-time bulk bootstrap helpers, not required per restart
+- Added operator build-hygiene note for Voxtream iteration:
+  - Voxtream lane is currently the slowest image build path and prone to large cache/image accumulation during rapid test cycles
+  - avoid routine `--no-cache` unless explicitly debugging cache corruption; regularly prune stale BuildKit/image artifacts on the node
 
 ## 2026-03-24
 

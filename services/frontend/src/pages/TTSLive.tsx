@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchStudioVoices, importStudioVoice } from "../api/studio";
+import { fetchStudioVoices, importStudioVoice, warmStudioRouteDetailed } from "../api/studio";
 import { fetchModels } from "../api/sessions";
 import { synthesizeText } from "../api/tts";
 import { Badge } from "../components/common/Badge";
@@ -154,6 +154,10 @@ function supportsDynamicSpeakingRate(model: string) {
   return model === "voxtream2_realtime" || model === "voxtream_realtime";
 }
 
+function supportsManualWarmup(model: string) {
+  return model === "voxtream2_realtime" || model === "voxtream_realtime";
+}
+
 function voiceSelectorLabel(model: string) {
   return usesReferenceVoiceAssets(model) ? "Reference voice asset" : "Voice preset";
 }
@@ -209,11 +213,15 @@ export function TTSLive() {
   const [referenceImportBusy, setReferenceImportBusy] = useState(false);
   const [referenceImportMessage, setReferenceImportMessage] = useState<string | null>(null);
   const [referenceImportError, setReferenceImportError] = useState<string | null>(null);
+  const [warmupBusy, setWarmupBusy] = useState(false);
+  const [warmupMessage, setWarmupMessage] = useState<string | null>(null);
+  const [warmupError, setWarmupError] = useState<string | null>(null);
 
   const liveModels = useMemo(() => models.filter(isBatchBackedLiveModel), [models]);
   const selectedModel = useMemo(() => liveModels.find((entry) => entry.name === model) ?? null, [liveModels, model]);
   const isBatchBackedLive = Boolean(selectedModel && !selectedModel.supports_streaming);
   const referenceVoiceModel = usesReferenceVoiceAssets(model);
+  const warmupEnabled = supportsManualWarmup(model);
   const sortedVoices = useMemo(() => [...voices].sort(sortVoices), [voices]);
   const modelVoices = useMemo(() => {
     if (model.startsWith("qwen_customvoice")) {
@@ -380,6 +388,27 @@ export function TTSLive() {
     setBatchError(null);
   }
 
+  async function handleWarmup() {
+    if (!warmupEnabled || sessionOpen) {
+      return;
+    }
+    setWarmupBusy(true);
+    setWarmupError(null);
+    setWarmupMessage(null);
+    try {
+      const payload = await warmStudioRouteDetailed(model);
+      const status = String(payload.warmup.status ?? "ready");
+      const elapsedMs = payload.warmup.elapsed_ms;
+      const elapsedLabel = typeof elapsedMs === "number" ? `${Math.round(elapsedMs)} ms` : null;
+      const routeLabel = String(payload.warmup.route ?? payload.route ?? model);
+      setWarmupMessage(`Warmup ${status} on ${routeLabel}${elapsedLabel ? ` in ${elapsedLabel}` : ""}.`);
+    } catch (err) {
+      setWarmupError((err as Error).message);
+    } finally {
+      setWarmupBusy(false);
+    }
+  }
+
   async function handleSend() {
     if (!isBatchBackedLive) {
       await stream.send(bodyText.trim());
@@ -480,6 +509,11 @@ export function TTSLive() {
           <button onClick={handleStart} disabled={sessionOpen}>
             {isBatchBackedLive ? (batchSessionArmed ? "Batch lane armed" : "Arm batch lane") : "Start stream"}
           </button>
+          {warmupEnabled ? (
+            <button onClick={() => void handleWarmup()} disabled={sessionOpen || warmupBusy} className="secondary">
+              {warmupBusy ? "Warming..." : "Warm up"}
+            </button>
+          ) : null}
           <button onClick={handleSend} disabled={!sessionOpen || !bodyText.trim()}>
             {isBatchBackedLive ? "Generate audio" : "Send text"}
           </button>
@@ -876,6 +910,8 @@ export function TTSLive() {
             ? "Primary use case: compare Qwen voices, artifacts, and total latency on the operator surface before deciding whether the model is good enough to promote into a deeper telephony harness."
             : "Primary use case: keep the stream open, bind a voice preset to the session, and push plain assistant text from your reasoning layer with minimal operator ceremony."}
         </p>
+        {warmupMessage ? <p className="muted">{warmupMessage}</p> : null}
+        {warmupError ? <p className="error-text">{warmupError}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>
     </div>

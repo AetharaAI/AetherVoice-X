@@ -132,6 +132,38 @@ def test_start_payload_forwards_speaking_rate_from_realtime_tuning() -> None:
     assert payload["speaking_rate"] == 2.5
 
 
+def test_warmup_posts_provider_warmup_and_returns_payload() -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"status": "ready", "model": "voxtream2_realtime", "elapsed_ms": 123.4}
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def post(self, path: str, json: dict | None = None) -> FakeResponse:
+            self.calls.append((path, dict(json or {})))
+            return FakeResponse()
+
+    adapter = VoxtreamRealtimeAdapter.__new__(VoxtreamRealtimeAdapter)
+    adapter.name = "voxtream2_realtime"
+    adapter.base_url = "http://voxtream2-provider:8075"
+    adapter.client = FakeClient()
+    adapter.ready = False
+
+    result = asyncio.run(adapter.warmup({"tenant_id": "default", "source": "tts_studio"}))
+
+    assert adapter.client.calls[0][0] == "/v1/warmup"
+    assert adapter.client.calls[0][1]["model"] == "voxtream2_realtime"
+    assert adapter.client.calls[0][1]["tenant_id"] == "default"
+    assert result["status"] == "ready"
+    assert result["route"] == "voxtream2_realtime"
+    assert adapter.ready is True
+
+
 # ---------------------------------------------------------------------------
 # Streaming service include_audio_bytes tests
 # ---------------------------------------------------------------------------

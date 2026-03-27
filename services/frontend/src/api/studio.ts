@@ -47,12 +47,19 @@ export async function saveStudioRouting(payload: Record<string, unknown>): Promi
   });
 }
 
+export type StudioWarmupResult = {
+  route: string;
+  warmup: Record<string, unknown>;
+  overview: StudioOverview;
+};
+
+export async function warmStudioRouteDetailed(routeName: string): Promise<StudioWarmupResult> {
+  return apiFetch<StudioWarmupResult>(`/v1/tts/studio/routes/${routeName}/warmup`, {
+    method: "POST"
+  });
+}
+
 export async function warmStudioRoute(routeName: string): Promise<StudioOverview> {
-  const payload = await apiFetch<{ route: string; warmup: Record<string, unknown>; overview: StudioOverview }>(
-    `/v1/tts/studio/routes/${routeName}/warmup`,
-    {
-      method: "POST"
-    }
-  );
+  const payload = await warmStudioRouteDetailed(routeName);
   return payload.overview;
 }

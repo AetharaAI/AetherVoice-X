@@ -22,6 +22,11 @@ Primary consumer examples:
 - Qwen batch and streaming provider contracts
 - Qwen load, warmup, and chunking behavior
 
+`voxtream-experiments` owns:
+- the external `voxtream2-provider` service
+- Voxtream2 warmup and stream lifecycle behavior
+- zero-shot reference-audio runtime proof
+
 Rule:
 - if another app needs platform behavior, integrate with `AetherVoice-X`
 - if another app needs raw Qwen provider behavior, integrate with `qwen-provider`
@@ -58,6 +63,7 @@ Key endpoints:
 - `POST /v1/voice/turn`
 - `GET /v1/tts/studio/overview`
 - `GET /v1/tts/studio/voices`
+- `POST /v1/tts/studio/routes/{route_name}/warmup`
 
 ### 2. Direct provider integration
 
@@ -81,6 +87,13 @@ Key provider endpoints:
 - native live streaming lane
 - best current low-latency route
 - preferred telephony baseline
+
+### `voxtream2_realtime`
+
+- external provider-backed realtime lane (`voxtream2-provider`)
+- requires a bound reference-audio asset
+- exposes dynamic speaking-rate control through TTS Live and stream metadata
+- first-run warmup is expected after container restarts or image refreshes
 
 ### `qwen_customvoice`
 
@@ -260,8 +273,39 @@ For real telephony qualification, capture:
 - audio duration
 - interruption behavior
 - quality vs Kokoro
+- cadence control quality as `speaking_rate` changes
 
 Do not promote the Qwen streaming lane into production telephony until it beats or justifies itself against `kokoro_realtime`.
+
+## Voxtream2 Warmup And Speaking Rate
+
+Warmup path from the platform:
+
+```bash
+curl -sS -X POST \
+  http://127.0.0.1:8010/api/v1/tts/studio/routes/voxtream2_realtime/warmup \
+  -H "X-Tenant-Id: default" \
+  | jq '{route, warmup}'
+```
+
+Notes:
+- Without `jq`, this endpoint also returns full studio overview payload by design.
+- The warmup block is the signal to trust (`status`, `model`, `elapsed_ms`).
+- TTS Live now exposes a `Warm up` button for Voxtream routes so operators do not need this curl during normal testing.
+
+Provider-direct warmup (debug lane only):
+
+```bash
+curl -sS -X POST \
+  http://127.0.0.1:8075/v1/warmup \
+  -H "Content-Type: application/json" \
+  -d '{"model":"voxtream2_realtime"}'
+```
+
+Speaking-rate control contract:
+- set `realtime_profile.speaking_rate` or `realtime_tuning.speaking_rate` at stream start
+- provider receives `speaking_rate` in `/v1/stream/start`
+- current safe operator range is `0.5` to `5.0` with `2.0` as default
 
 ## Operator Verification
 

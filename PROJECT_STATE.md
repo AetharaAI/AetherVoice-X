@@ -2,11 +2,18 @@
 
 ## 2026-03-26 Voxtream stream/start contract truth
 
+- `voxtream_realtime` and `voxtream2_realtime` now expose real warmup behavior through the existing studio route warmup contract:
+  - adapter warmup now forwards to provider `POST /v1/warmup`
+  - warmup payload includes route alias model (`voxtream*_realtime`) and tenant metadata
+  - warmup responses now carry provider truth (`status`, `model`, `elapsed_ms`) instead of base-adapter `noop`
+- `TTS Live` now has a Voxtream-only `Warm up` operator button so first-load warmup can be triggered without manual curl.
 - `voxtream2_realtime` stream/start now sends route alias (`voxtream2_realtime`) instead of HF model ID (`herimor/voxtream2`) to the external provider.
 - This removes a real `400 Unsupported model` failure mode in provider runtimes that validate alias-only model contracts.
 - Existing Voxtream reference-audio transport truth remains in place (`include_audio_bytes=True` on Voxtream routes so `prompt_audio_b64` can cross containers).
 - Studio voice assets and registry persistence are now backed by a shared named Docker volume mounted at `LOCAL_STORAGE_ROOT` on both `gateway` and `tts`.
 - Operational consequence: imported reference voices survive `tts`/`gateway` container recreation, so `seed_voxtream_voices.*` is a bulk bootstrap convenience, not a recurring runtime requirement.
+- Build operations note: Voxtream images are currently the slowest lane to build and can accumulate substantial Docker build cache and stale image layers during rapid iteration.
+- Operator rule: avoid habitual `--no-cache` builds unless debugging cache poisoning; periodically audit and prune stale BuildKit cache/images on the node so storage pressure does not silently degrade build and deploy reliability.
 
 ## 2026-03-19 Qwen Runtime Truth
 
