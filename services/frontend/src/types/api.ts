@@ -185,7 +185,7 @@ export interface StudioVoice {
   tenant_id?: string | null;
   type: "preset" | "cloned" | "generated" | "imported" | "fallback";
   source_model: string;
-  runtime_target: "kokoro_realtime" | "voxtream_realtime" | "voxtream2_realtime" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming" | "qwen_voice_design";
+  runtime_target: "kokoro_realtime" | "voxtream_realtime" | "voxtream2_realtime" | "voxtral_tts" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming" | "qwen_voice_design";
   reference_audio_path?: string | null;
   reference_text?: string | null;
   generation_prompt?: string | null;
@@ -197,7 +197,7 @@ export interface StudioVoice {
 }
 
 export interface StudioRouteDescriptor {
-  name: "kokoro_realtime" | "voxtream_realtime" | "voxtream2_realtime" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming" | "qwen_voice_design";
+  name: "kokoro_realtime" | "voxtream_realtime" | "voxtream2_realtime" | "voxtral_tts" | "chatterbox" | "qwen_customvoice" | "qwen_customvoice_streaming" | "qwen_voice_design";
   label: string;
   mode: "stream" | "batch" | "dialogue" | "voice-design";
   status: "ready" | "staged" | "disabled" | "missing";

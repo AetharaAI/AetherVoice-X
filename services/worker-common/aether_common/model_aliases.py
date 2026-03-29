@@ -35,6 +35,9 @@ TTS_MODEL_ALIASES = {
     "voxtream2-realtime": "voxtream2_realtime",
     "voxtream2": "voxtream2_realtime",
     "herimor/voxtream2": "voxtream2_realtime",
+    "voxtral_tts": "voxtral_tts",
+    "voxtral-tts": "voxtral_tts",
+    "mistralai/voxtral-4b-tts-2603": "voxtral_tts",
 }
 
 

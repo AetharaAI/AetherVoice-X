@@ -81,7 +81,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic",
 }
 
-ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "voxtream_realtime", "voxtream2_realtime", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
+ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "voxtream_realtime", "voxtream2_realtime", "voxtral_tts", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
 
 
 class StudioService:
@@ -261,6 +261,16 @@ class StudioService:
                 source_model="kokoro_realtime",
                 runtime_target="kokoro_realtime",
                 tags=["kokoro", "preset", "realtime"],
+            ),
+            VoiceRecord(
+                voice_id="voxtral_casual_female",
+                display_name="Voxtral Casual Female",
+                type="preset",
+                source_model="voxtral_tts",
+                runtime_target="voxtral_tts",
+                tags=["voxtral_tts", "preset", "batch", "female"],
+                default_params={"voxtral_voice": "casual_female"},
+                notes="Preset voice lane for external Voxtral TTS provider bring-up.",
             ),
             VoiceRecord(
                 voice_id="chatterbox_default",
@@ -503,6 +513,16 @@ class StudioService:
                 runtime_wired=bool(self.settings.qwen_provider_base_url),
                 notes="Prompt-driven Qwen voice creation lane for generating new reusable assets inside TTS Studio without disturbing the live operator routes.",
                 fallback_target="qwen_customvoice",
+            ),
+            self._route_descriptor(
+                name="voxtral_tts",
+                label="Voxtral TTS",
+                mode="batch",
+                endpoint=self.settings.voxtral_tts_base_url,
+                requires_endpoint=True,
+                runtime_wired=bool(self.settings.voxtral_tts_base_url),
+                notes="External Voxtral TTS provider lane for fast preset-voice batch synthesis and comparison runs.",
+                fallback_target="chatterbox",
             ),
             self._route_descriptor(
                 name="chatterbox",

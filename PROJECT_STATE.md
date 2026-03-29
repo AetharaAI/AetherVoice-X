@@ -2,6 +2,11 @@
 
 ## 2026-03-26 Voxtream stream/start contract truth
 
+- `voxtral_tts` is now wired as an additive external batch lane in core:
+  - endpoint-driven adapter behind `/v1/tts/synthesize`
+  - studio route visibility and voice-runtime targeting added (`runtime_target=voxtral_tts`)
+  - initial seeded preset voice (`voxtral_casual_female`) maps to provider voice `casual_female`
+  - intended usage is rapid external-provider bring-up without forcing immediate sidecar containerization
 - `voxtream_realtime` and `voxtream2_realtime` now expose real warmup behavior through the existing studio route warmup contract:
   - adapter warmup now forwards to provider `POST /v1/warmup`
   - warmup payload includes route alias model (`voxtream*_realtime`) and tenant metadata

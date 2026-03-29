@@ -7,6 +7,7 @@ from ..adapters.kokoro_realtime import KokoroRealtimeAdapter
 from ..adapters.qwen_customvoice import QwenCustomVoiceAdapter
 from ..adapters.qwen_customvoice_streaming import QwenCustomVoiceStreamingAdapter
 from ..adapters.qwen_voice_design import QwenVoiceDesignAdapter
+from ..adapters.voxtral_tts import VoxtralTTSAdapter
 from ..adapters.voxtream_realtime import VoxtreamRealtimeAdapter
 from ..config import get_settings
 
@@ -56,6 +57,12 @@ class ModelRegistry:
                 base_url=settings.voxtream2_realtime_base_url,
                 model_name=settings.voxtream2_model_id,
                 timeout_seconds=settings.voxtream2_realtime_timeout_seconds,
+            ),
+            "voxtral_tts": VoxtralTTSAdapter(
+                base_url=settings.voxtral_tts_base_url,
+                model_name=settings.voxtral_tts_model_alias,
+                default_voice=settings.voxtral_tts_default_voice,
+                timeout_seconds=settings.voxtral_tts_timeout_seconds,
             ),
         }
 
@@ -111,7 +118,11 @@ class ModelRegistry:
                                             else (
                                                 ["realtime", "zero_shot_clone", "reference_audio", "full_stream", "dynamic_speaking_rate"]
                                                 if adapter.name == "voxtream2_realtime"
-                                                else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                                else (
+                                                    ["provider_http", "batch", "preset_voices", "tts"]
+                                                    if adapter.name == "voxtral_tts"
+                                                    else ["realtime", "preset_voices", "adapter_driven_streaming"]
+                                                )
                                             )
                                         )
                                     )
@@ -131,14 +142,14 @@ class ModelRegistry:
                                 else (
                                     10
                                     if adapter.name == "qwen_customvoice_streaming"
-                                    else (15 if adapter.name == "qwen_customvoice" else (18 if adapter.name == "qwen_voice_design" else 30))
+                                    else (15 if adapter.name == "qwen_customvoice" else (16 if adapter.name == "voxtral_tts" else (18 if adapter.name == "qwen_voice_design" else 30)))
                                 )
                             )
                         )
                     ),
                     "memory_footprint": (
                         "external-service"
-                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design", "voxtream_realtime", "voxtream2_realtime"}
+                        if adapter.name in {"kokoro_realtime", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design", "voxtream_realtime", "voxtream2_realtime", "voxtral_tts"}
                         and (getattr(adapter, "ready", False) or getattr(adapter, "configured", False))
                         else ("external" if adapter.name == "chatterbox" else "external-service")
                     ),

@@ -2,6 +2,15 @@
 
 ## 2026-03-26
 
+- Added additive external `voxtral_tts` batch lane wiring in `AetherVoice-X`:
+  - new `VoxtralTTSAdapter` for OpenAI-style `/v1/audio/speech` providers returning binary audio
+  - new settings/env knobs: `VOXTRAL_TTS_BASE_URL`, `VOXTRAL_TTS_MODEL_ALIAS`, `VOXTRAL_TTS_DEFAULT_VOICE`, `VOXTRAL_TTS_TIMEOUT_SECONDS`
+  - model alias normalization now accepts `voxtral_tts`/`voxtral-tts`/`mistralai/voxtral-4b-tts-2603`
+  - Studio route catalog now exposes `voxtral_tts` as batch route when endpoint is configured
+  - seed registry adds `voxtral_casual_female` preset mapped to provider voice `casual_female`
+  - frontend Studio route/voice types updated to include `voxtral_tts`
+  - added unit test coverage in `tests/unit/test_voxtral_tts_adapter.py`
+
 - Added real Voxtream route warmup behavior:
   - `VoxtreamRealtimeAdapter.warmup()` now calls provider `POST /v1/warmup` with the route alias model and tenant metadata
   - `POST /api/v1/tts/studio/routes/voxtream2_realtime/warmup` now returns provider warmup truth instead of base-adapter `status=noop`
