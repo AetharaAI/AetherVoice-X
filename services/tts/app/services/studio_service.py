@@ -82,6 +82,28 @@ PROVIDER_LABELS = {
 }
 
 ACTIVE_ROUTE_TARGETS = {"kokoro_realtime", "voxtream_realtime", "voxtream2_realtime", "voxtral_tts", "chatterbox", "qwen_customvoice", "qwen_customvoice_streaming", "qwen_voice_design"}
+VOXTRAL_PRESET_VOICES = [
+    "ar_male",
+    "casual_female",
+    "casual_male",
+    "cheerful_female",
+    "de_female",
+    "de_male",
+    "es_female",
+    "es_male",
+    "fr_female",
+    "fr_male",
+    "hi_female",
+    "hi_male",
+    "it_female",
+    "it_male",
+    "neutral_female",
+    "neutral_male",
+    "nl_female",
+    "nl_male",
+    "pt_female",
+    "pt_male",
+]
 
 
 class StudioService:
@@ -725,17 +747,21 @@ class StudioService:
 
     def _voxtral_provider_preset_voices(self) -> list[VoiceRecord]:
         base_url = (self.settings.voxtral_tts_base_url or "").rstrip("/")
-        if not base_url:
-            return []
+        records: list[Any] | None = None
+        provider_reachable = False
         try:
-            response = httpx.get(f"{base_url}/v1/audio/voices", timeout=4.0)
-            response.raise_for_status()
-            payload = response.json()
+            if base_url:
+                response = httpx.get(f"{base_url}/v1/audio/voices", timeout=4.0)
+                response.raise_for_status()
+                payload = response.json()
+                candidate = payload.get("voices") if isinstance(payload, dict) else payload
+                if isinstance(candidate, list):
+                    records = candidate
+                    provider_reachable = True
         except Exception:
-            return []
-        records = payload.get("voices") if isinstance(payload, dict) else payload
-        if not isinstance(records, list):
-            return []
+            records = None
+        if not isinstance(records, list) or not records:
+            records = list(VOXTRAL_PRESET_VOICES)
         voices: list[VoiceRecord] = []
         for entry in records:
             if isinstance(entry, str):
@@ -763,7 +789,11 @@ class StudioService:
                     runtime_target="voxtral_tts",
                     tags=["voxtral_tts", "preset", "stream", "batch"],
                     default_params={"voxtral_voice": raw_voice},
-                    notes="Provider-reported Voxtral preset voice.",
+                    notes=(
+                        "Provider-reported Voxtral preset voice."
+                        if provider_reachable
+                        else "Fallback Voxtral preset voice from local catalog (provider discovery unavailable)."
+                    ),
                 )
             )
         return voices

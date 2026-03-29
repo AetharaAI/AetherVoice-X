@@ -66,17 +66,25 @@ class VoxtralTTSAdapter(BaseTTSAdapter):
     async def _generate_audio(self, *, text: str, voice_name: str, output_format: str, metadata: dict[str, Any] | None = None) -> tuple[bytes, str]:
         if not self.base_url or self.client is None:
             raise RuntimeError("Voxtral TTS provider is not configured")
-        response = await self.client.post(
-            "/v1/audio/speech",
-            json={
-                "model": self.model_name,
-                "input": text,
-                "response_format": output_format,
-                "voice": voice_name,
-                "metadata": metadata or {},
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                "/v1/audio/speech",
+                json={
+                    "model": self.model_name,
+                    "input": text,
+                    "response_format": output_format,
+                    "voice": voice_name,
+                    "metadata": metadata or {},
+                },
+            )
+            response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise RuntimeError(f"Voxtral TTS request timed out against {self.base_url}. Check provider bind/port and timeout.") from exc
+        except httpx.ConnectError as exc:
+            raise RuntimeError(f"Voxtral TTS provider is unreachable at {self.base_url}. Check host binding and container route.") from exc
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip() or exc.response.reason_phrase or "upstream request failed"
+            raise RuntimeError(f"Voxtral TTS upstream error ({exc.response.status_code}): {detail}") from exc
 
         content_type = str(response.headers.get("content-type") or "").lower()
         if "application/json" in content_type:
