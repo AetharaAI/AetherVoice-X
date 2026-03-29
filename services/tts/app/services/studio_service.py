@@ -560,11 +560,12 @@ class StudioService:
     def resolve_stream_runtime_truth(self, tenant_id: str, *, requested_route: str, runtime_path_used: str, voice_id: str, metadata: dict[str, Any], fallback_route_used: str | None) -> dict[str, Any]:
         voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
         extra = (metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
+        resolution_target = runtime_path_used or requested_route
         resolved_voice = extra.get("resolved_voice") if isinstance(extra, dict) else None
         selected_voice = (
             VoiceRecord.model_validate(resolved_voice)
             if isinstance(resolved_voice, dict)
-            else voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("chatterbox_default")
+            else self._resolve_model_voice(voices, model=resolution_target, voice_id=voice_id)
         )
         realtime_profile = ((metadata.get("extra") or {}).get("realtime_profile") or {}) if isinstance(metadata, dict) else {}
         requested_preset = realtime_profile.get("voice_preset_id") if isinstance(realtime_profile, dict) else None
@@ -798,6 +799,48 @@ class StudioService:
             )
         return voices
 
+    def _resolve_voxtral_voice(self, voices: dict[str, VoiceRecord], voice_id: str) -> VoiceRecord | None:
+        candidate = (voice_id or "").strip()
+        if not candidate:
+            return None
+        direct = voices.get(candidate)
+        if direct is not None and direct.runtime_target == "voxtral_tts":
+            return direct
+        lowered = candidate.lower()
+        normalized = lowered[len("voxtral_") :] if lowered.startswith("voxtral_") else lowered
+        for voice in voices.values():
+            if voice.runtime_target != "voxtral_tts":
+                continue
+            default_voice = str(voice.default_params.get("voxtral_voice") or "").strip().lower()
+            voice_key = voice.voice_id.strip().lower()
+            if lowered == voice_key or lowered == f"voxtral_{default_voice}" or normalized == default_voice:
+                return voice
+        return None
+
+    def _resolve_model_voice(self, voices: dict[str, VoiceRecord], *, model: str, voice_id: str) -> VoiceRecord | None:
+        model_name = (model or "").strip()
+        requested_voice = (voice_id or "").strip()
+        if model_name == "voxtral_tts":
+            return self._resolve_voxtral_voice(voices, requested_voice) or voices.get("voxtral_casual_female")
+        if requested_voice and requested_voice in voices:
+            return voices[requested_voice]
+        if model_name == "kokoro_realtime":
+            return voices.get(self.settings.kokoro_default_voice)
+        if model_name in {"voxtream_realtime", "voxtream2_realtime"}:
+            for voice in voices.values():
+                if voice.runtime_target == model_name and voice.reference_audio_path:
+                    return voice
+            return None
+        if model_name.startswith("qwen_customvoice"):
+            preferred = voices.get(f"qwen_{self.settings.qwen_provider_default_voice.lower()}")
+            if preferred is not None:
+                return preferred
+            for voice in voices.values():
+                if voice.runtime_target in {"qwen_customvoice", "qwen_customvoice_streaming"}:
+                    return voice
+            return None
+        return voices.get(self.settings.kokoro_default_voice) or voices.get("chatterbox_default")
+
     def resolve_voice_metadata(
         self,
         tenant_id: str,
@@ -808,7 +851,7 @@ class StudioService:
         include_audio_bytes: bool = False,
     ) -> dict[str, Any]:
         voices = {voice.voice_id: voice for voice in self.list_voices(tenant_id)}
-        selected = voices.get(voice_id) or voices.get(self.settings.kokoro_default_voice) or voices.get("chatterbox_default")
+        selected = self._resolve_model_voice(voices, model=model, voice_id=voice_id)
         extra = dict(metadata.get("extra") or {}) if isinstance(metadata, dict) else {}
         if selected is None:
             return extra
