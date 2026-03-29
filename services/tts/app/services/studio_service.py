@@ -268,9 +268,9 @@ class StudioService:
                 type="preset",
                 source_model="voxtral_tts",
                 runtime_target="voxtral_tts",
-                tags=["voxtral_tts", "preset", "batch", "female"],
+                tags=["voxtral_tts", "preset", "stream", "batch", "female"],
                 default_params={"voxtral_voice": "casual_female"},
-                notes="Preset voice lane for external Voxtral TTS provider bring-up.",
+                notes="Preset voice lane for external Voxtral TTS provider bring-up (stream + batch capable).",
             ),
             VoiceRecord(
                 voice_id="chatterbox_default",
@@ -517,12 +517,12 @@ class StudioService:
             self._route_descriptor(
                 name="voxtral_tts",
                 label="Voxtral TTS",
-                mode="batch",
+                mode="stream",
                 endpoint=self.settings.voxtral_tts_base_url,
                 requires_endpoint=True,
                 runtime_wired=bool(self.settings.voxtral_tts_base_url),
-                notes="External Voxtral TTS provider lane for fast preset-voice batch synthesis and comparison runs.",
-                fallback_target="chatterbox",
+                notes="External Voxtral TTS provider lane for preset-voice low-latency streaming and batch synthesis.",
+                fallback_target="kokoro_realtime",
             ),
             self._route_descriptor(
                 name="chatterbox",
@@ -599,6 +599,19 @@ class StudioService:
                 live_chunk_source_route = "qwen_provider.batch_probe"
                 final_artifact_source_route = "qwen_provider.batch_finalize"
                 notes.append("Qwen batch-backed live uses one finalized generation for quality and total-latency evaluation.")
+        elif runtime_path_used == "voxtral_tts":
+            if selected_voice is None or selected_voice.runtime_target != "voxtral_tts":
+                selected_voice = voices.get("voxtral_casual_female") or selected_voice
+            voxtral_voice = self.settings.voxtral_tts_default_voice
+            if selected_voice is not None:
+                voxtral_voice = str(selected_voice.default_params.get("voxtral_voice") or selected_voice.display_name or voxtral_voice)
+            conditioning_source = f"voxtral_preset_voice:{voxtral_voice}"
+            conditioning_active = True
+            resolved_asset = voxtral_voice
+            fallback_voice_path = self.settings.voxtral_tts_default_voice
+            live_chunk_source_route = "voxtral_tts.provider_stream"
+            final_artifact_source_route = "voxtral_tts.provider_finalize"
+            notes.append("Voxtral TTS uses built-in provider preset voices and does not require reference-audio assets.")
         else:
             conditioning_source = selected_voice.reference_audio_path if selected_voice and selected_voice.reference_audio_path else "chatterbox_default_voice"
             conditioning_active = True
@@ -705,7 +718,55 @@ class StudioService:
         registry = self._read_registry()
         voices = [voice for entry in registry.get("voices", []) if (voice := self._coerce_voice_record(entry)) is not None]
         filtered = [voice for voice in voices if voice.tenant_id in {None, tenant_id}]
-        return sorted(filtered, key=lambda voice: (voice.type, voice.display_name.lower()))
+        by_id = {voice.voice_id: voice for voice in filtered}
+        for provider_voice in self._voxtral_provider_preset_voices():
+            by_id.setdefault(provider_voice.voice_id, provider_voice)
+        return sorted(by_id.values(), key=lambda voice: (voice.type, voice.display_name.lower()))
+
+    def _voxtral_provider_preset_voices(self) -> list[VoiceRecord]:
+        base_url = (self.settings.voxtral_tts_base_url or "").rstrip("/")
+        if not base_url:
+            return []
+        try:
+            response = httpx.get(f"{base_url}/v1/audio/voices", timeout=4.0)
+            response.raise_for_status()
+            payload = response.json()
+        except Exception:
+            return []
+        records = payload.get("voices") if isinstance(payload, dict) else payload
+        if not isinstance(records, list):
+            return []
+        voices: list[VoiceRecord] = []
+        for entry in records:
+            if isinstance(entry, str):
+                raw_voice = entry.strip()
+                display_name = raw_voice.replace("_", " ").title()
+            elif isinstance(entry, dict):
+                raw_voice = str(entry.get("voice") or entry.get("id") or entry.get("name") or "").strip()
+                display_name = str(
+                    entry.get("display_name")
+                    or entry.get("label")
+                    or entry.get("name")
+                    or raw_voice.replace("_", " ").title()
+                ).strip()
+            else:
+                continue
+            if not raw_voice:
+                continue
+            label = display_name if display_name.lower().startswith("voxtral") else f"Voxtral {display_name}"
+            voices.append(
+                VoiceRecord(
+                    voice_id=f"voxtral_{self._slugify(raw_voice)}",
+                    display_name=label,
+                    type="preset",
+                    source_model="voxtral_tts",
+                    runtime_target="voxtral_tts",
+                    tags=["voxtral_tts", "preset", "stream", "batch"],
+                    default_params={"voxtral_voice": raw_voice},
+                    notes="Provider-reported Voxtral preset voice.",
+                )
+            )
+        return voices
 
     def resolve_voice_metadata(
         self,

@@ -119,7 +119,7 @@ class ModelRegistry:
                                                 ["realtime", "zero_shot_clone", "reference_audio", "full_stream", "dynamic_speaking_rate"]
                                                 if adapter.name == "voxtream2_realtime"
                                                 else (
-                                                    ["provider_http", "batch", "preset_voices", "tts"]
+                                                    ["provider_http", "streaming", "batch", "preset_voices", "tts"]
                                                     if adapter.name == "voxtral_tts"
                                                     else ["realtime", "preset_voices", "adapter_driven_streaming"]
                                                 )

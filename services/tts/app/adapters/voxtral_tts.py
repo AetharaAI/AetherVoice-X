@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from typing import Any
 
 import httpx
 
@@ -11,7 +12,7 @@ from ..schemas.responses import StreamCompletion, StreamSession
 
 class VoxtralTTSAdapter(BaseTTSAdapter):
     name = "voxtral_tts"
-    supports_streaming = False
+    supports_streaming = True
     supports_batch = True
 
     def __init__(
@@ -29,6 +30,7 @@ class VoxtralTTSAdapter(BaseTTSAdapter):
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.base_url else None
         self.configured = bool(self.base_url)
         self.ready = self.refresh_health()
+        self._stream_sessions: dict[str, dict[str, Any]] = {}
 
     def refresh_health(self) -> bool:
         if not self.base_url:
@@ -47,45 +49,53 @@ class VoxtralTTSAdapter(BaseTTSAdapter):
 
     def _resolve_voice_name(self, request: TTSRequest) -> str:
         extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
+        return self._resolve_voice_name_from_extra(extra, fallback_voice=request.voice)
+
+    def _resolve_voice_name_from_extra(self, extra: dict[str, Any], *, fallback_voice: str) -> str:
         resolved_voice = extra.get("resolved_voice")
         if isinstance(resolved_voice, dict):
             default_params = dict(resolved_voice.get("default_params") or {})
             voxtral_voice = str(default_params.get("voxtral_voice") or "").strip()
             if voxtral_voice:
                 return voxtral_voice
-        candidate = (request.voice or "").strip()
+        candidate = (fallback_voice or "").strip()
         if not candidate or candidate in {"default", "chatterbox_default"}:
             return self.default_voice
         return candidate
 
-    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult:
+    async def _generate_audio(self, *, text: str, voice_name: str, output_format: str, metadata: dict[str, Any] | None = None) -> tuple[bytes, str]:
         if not self.base_url or self.client is None:
             raise RuntimeError("Voxtral TTS provider is not configured")
-        voice_name = self._resolve_voice_name(request)
         response = await self.client.post(
             "/v1/audio/speech",
             json={
                 "model": self.model_name,
-                "input": request.text,
-                "response_format": request.format,
+                "input": text,
+                "response_format": output_format,
                 "voice": voice_name,
-                "metadata": request.metadata,
+                "metadata": metadata or {},
             },
         )
         response.raise_for_status()
 
-        audio_bytes: bytes
-        output_format = request.format
         content_type = str(response.headers.get("content-type") or "").lower()
         if "application/json" in content_type:
             payload = response.json()
             audio_b64 = payload.get("audio_b64")
             if not isinstance(audio_b64, str) or not audio_b64:
                 raise RuntimeError("Voxtral TTS provider returned no audio payload")
-            audio_bytes = base64.b64decode(audio_b64)
-            output_format = str(payload.get("format") or request.format)
-        else:
-            audio_bytes = response.content
+            return base64.b64decode(audio_b64), str(payload.get("format") or output_format)
+
+        return response.content, output_format
+
+    async def synthesize(self, request: TTSRequest) -> BatchSynthesisResult:
+        voice_name = self._resolve_voice_name(request)
+        audio_bytes, output_format = await self._generate_audio(
+            text=request.text,
+            voice_name=voice_name,
+            output_format=request.format,
+            metadata=request.metadata,
+        )
 
         self.ready = True
         return BatchSynthesisResult(
@@ -100,11 +110,80 @@ class VoxtralTTSAdapter(BaseTTSAdapter):
         )
 
     async def start_stream(self, request: TTSStreamStartRequest) -> StreamSession:
-        raise NotImplementedError("Voxtral TTS is integrated as a batch lane in this stack")
+        if not self.base_url or self.client is None:
+            raise RuntimeError("Voxtral TTS provider is not configured")
+        extra = dict(request.metadata.get("extra") or {}) if isinstance(request.metadata, dict) else {}
+        voice_name = self._resolve_voice_name_from_extra(extra, fallback_voice=request.voice)
+        self._stream_sessions[request.session_id] = {
+            "voice_name": voice_name,
+            "format": request.format,
+            "metadata": request.metadata,
+            "sequence": 0,
+            "text_fragments": [],
+            "last_audio_bytes": b"",
+            "last_output_format": request.format,
+        }
+        self.ready = True
+        return StreamSession(session_id=request.session_id, model=self.name, expires_in_seconds=3600)
 
     async def push_text(self, session_id: str, text: str) -> list[dict]:
-        raise NotImplementedError("Voxtral TTS is integrated as a batch lane in this stack")
+        state = self._stream_sessions.get(session_id)
+        if state is None:
+            raise RuntimeError(f"Unknown Voxtral stream session: {session_id}")
+        state["sequence"] += 1
+        state["text_fragments"].append(text)
+        audio_bytes, output_format = await self._generate_audio(
+            text=text,
+            voice_name=str(state["voice_name"]),
+            output_format=str(state["format"]),
+            metadata=dict(state.get("metadata") or {}),
+        )
+        state["last_audio_bytes"] = audio_bytes
+        state["last_output_format"] = output_format
+        self.ready = True
+        return [
+            {
+                "type": "audio_chunk",
+                "session_id": session_id,
+                "sequence": int(state["sequence"]),
+                "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
+                "format": output_format,
+                "metadata": {
+                    "runtime_path_used": self.name,
+                    "voxtral_tts_voice": state["voice_name"],
+                    "voxtral_tts_model": self.model_name,
+                },
+            }
+        ]
 
     async def end_stream(self, session_id: str) -> tuple[StreamCompletion, bytes]:
-        raise NotImplementedError("Voxtral TTS is integrated as a batch lane in this stack")
-
+        state = self._stream_sessions.pop(session_id, None)
+        if state is None:
+            raise RuntimeError(f"Unknown Voxtral stream session: {session_id}")
+        audio_bytes = bytes(state.get("last_audio_bytes") or b"")
+        output_format = str(state.get("last_output_format") or "wav")
+        if not audio_bytes:
+            joined_text = " ".join(str(part) for part in state.get("text_fragments", []) if str(part).strip()).strip()
+            if joined_text:
+                audio_bytes, output_format = await self._generate_audio(
+                    text=joined_text,
+                    voice_name=str(state["voice_name"]),
+                    output_format=str(state["format"]),
+                    metadata=dict(state.get("metadata") or {}),
+                )
+            else:
+                raise RuntimeError("Voxtral stream ended without any text to synthesize")
+        self.ready = True
+        return (
+            StreamCompletion(
+                model_used=self.name,
+                format=output_format,
+                duration_ms=0,
+                artifacts={
+                    "runtime_path_used": self.name,
+                    "voxtral_tts_voice": state["voice_name"],
+                    "voxtral_tts_model": self.model_name,
+                },
+            ),
+            audio_bytes,
+        )

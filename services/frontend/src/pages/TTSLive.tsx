@@ -129,19 +129,22 @@ function sortVoices(left: StudioVoice, right: StudioVoice) {
     if (voice.runtime_target === "kokoro_realtime") {
       return 0;
     }
-    if (voice.runtime_target === "voxtream_realtime") {
+    if (voice.runtime_target === "voxtral_tts") {
       return 1;
     }
-    if (voice.runtime_target === "voxtream2_realtime") {
+    if (voice.runtime_target === "voxtream_realtime") {
       return 2;
     }
-    if (voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming") {
+    if (voice.runtime_target === "voxtream2_realtime") {
       return 3;
     }
-    if (voice.runtime_target === "chatterbox") {
+    if (voice.runtime_target === "qwen_customvoice" || voice.runtime_target === "qwen_customvoice_streaming") {
       return 4;
     }
-    return 5;
+    if (voice.runtime_target === "chatterbox") {
+      return 5;
+    }
+    return 6;
   };
   return rank(left) - rank(right) || left.display_name.localeCompare(right.display_name);
 }
@@ -231,6 +234,9 @@ export function TTSLive() {
     }
     if (model === "kokoro_realtime") {
       return sortedVoices.filter((voice) => voice.runtime_target === "kokoro_realtime");
+    }
+    if (model === "voxtral_tts") {
+      return sortedVoices.filter((voice) => voice.runtime_target === "voxtral_tts");
     }
     if (model === "voxtream_realtime") {
       return sortedVoices.filter((voice) => voice.runtime_target === "voxtream_realtime" && Boolean(voice.reference_audio_path));
@@ -595,6 +601,8 @@ export function TTSLive() {
                   ? "Voxtream2 expects a bound reference-audio asset for zero-shot prompting and adds dynamic speaking-rate control. Pick an imported or generated voice with a real WAV asset before judging telephony realism."
                 : runtimePathUsed === "kokoro_realtime"
                   ? "Kokoro uses built-in preset voices for the live lane, so no reference-audio conditioning is required."
+                  : runtimePathUsed === "voxtral_tts"
+                    ? "Voxtral TTS uses built-in preset voices from the provider lane and supports both low-latency streaming and batch synthesis."
                   : runtimeTruth?.conditioning_active
                     ? "This session resolved to a real conditioning asset. Realtime inference is materially using the bound conditioning source."
                   : "This session is falling back to the default global prompt path because the selected voice does not have a usable reference asset."}
