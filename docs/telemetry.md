@@ -13,3 +13,5 @@ Key metrics:
 - `voice_active_sessions`
 - `voice_model_fallback_total`
 - `voice_queue_depth`
+
+Runtime truth logs now also include route/voice resolution fields on TTS paths (for example `runtime_path_used`, selected voice identity, and fallback fields) so adapter selection is auditable during integration and regression checks.

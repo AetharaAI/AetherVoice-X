@@ -1,5 +1,18 @@
 # Project State
 
+## 2026-03-30 Voxtral Provider-Lane Truth
+
+- `voxtral_tts` is now runtime-verified as a working external provider lane in `TTS Live`:
+  - stream start accepted
+  - text push returns provider synthesis
+  - first chunk and final artifact observed in operator UI and container logs
+- Voice resolution for `voxtral_tts` is now model-aware:
+  - Voxtral voice selections no longer silently fall back to Kokoro voice metadata (`af_sky`)
+  - raw provider voice names (example: `casual_female`) and Studio IDs (example: `voxtral_casual_female`) both resolve correctly
+- Integration docs were refreshed to current truth:
+  - canonical doc now points to the new dated runbook
+  - stale MOSS-era references in core `docs/` route/adapter pages were updated
+
 ## 2026-03-26 Voxtream stream/start contract truth
 
 - `voxtral_tts` is now wired as an additive external batch lane in core:

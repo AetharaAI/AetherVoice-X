@@ -8,6 +8,10 @@ The local stack defaults to optional auth for operator convenience. Production d
 - `voice:metrics:read`
 - `voice:triage`
 
+Common integration headers:
+- `Authorization: Bearer <token>` or `X-API-Key: <key>` (deployment dependent)
+- `X-Tenant-Id: <tenant>` is propagated internally by gateway context
+
 Data controls available in the code:
 
 - no-persist mode

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-30
+
+- Verified `voxtral_tts` realtime lane runtime truth in `TTS Live`:
+  - stream start / text push / first chunk / final artifact all observed through gateway + `tts` + `voxtral-tts-provider` logs
+  - provider preset voices validated in operator flow
+- Fixed model-aware voice resolution for `voxtral_tts` in core `StudioService`:
+  - requests using Voxtral voice IDs (or raw provider voice names) no longer default to Kokoro voice metadata
+  - stream/runtime truth now resolves against effective route target (`runtime_path_used`) instead of unconditional Kokoro fallback
+- Added new integration handoff doc:
+  - [VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-30.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-30.md)
+- Refreshed stale docs surfaces to current route truth:
+  - `docs/api-contracts.md`
+  - `docs/model-adapters.md`
+  - `docs/architecture.md`
+  - `docs/telemetry.md`
+  - `docs/security.md`
+  - `VOICE_SUBSTRATE_INTEGRATION_CANONICAL.md`
+
 ## 2026-03-26
 
 - Added additive external `voxtral_tts` batch lane wiring in `AetherVoice-X`:

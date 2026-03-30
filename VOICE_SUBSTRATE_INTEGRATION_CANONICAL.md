@@ -163,7 +163,7 @@ Realtime and/or batch route families currently wired in the substrate include:
 - `kokoro_realtime` (TTS realtime baseline)
 - `voxtream_realtime` (TTS realtime experimental lane)
 - `voxtream2_realtime` (TTS realtime experimental lane)
-- `voxtral_tts` (TTS batch external provider lane)
+- `voxtral_tts` (TTS external provider lane: batch + streaming)
 - `qwen_customvoice` (TTS batch)
 - `qwen_customvoice_streaming` (TTS streaming eval lane)
 - `qwen_voice_design` (TTS voice-design lane)
@@ -281,6 +281,7 @@ Underlying providers/models can change without changing the client integration.
 Streaming is typically SSE over HTTP.
 Realtime paths may use WebSockets when implemented separately.
 
+- [VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-30.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-30.md)
 - [VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-26.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICE_SUBSTRATE_API_INTEGRATION_RUNBOOK_2026-03-26.md)
 - [VOICEOPS_REALTIME_VOICE_API_CONTRACT_2026-03-14.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICEOPS_REALTIME_VOICE_API_CONTRACT_2026-03-14.md)
 - [PROJECT_STATE.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/PROJECT_STATE.md)

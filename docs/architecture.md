@@ -19,4 +19,7 @@ Aether Voice uses a gateway pattern to keep the external contract stable while i
 
 - `auto` model resolution happens inside the gateway policy engine.
 - ASR uses batch-first `faster-whisper` and streaming fallback when realtime adapters are unavailable.
-- TTS prefers `kokoro_realtime` for conversational streaming, keeps `moss_realtime` isolated for specialized experimentation, and uses `chatterbox` for stable batch synthesis.
+- TTS prefers `kokoro_realtime` for conversational streaming baseline.
+- `voxtral_tts` is an additive external provider lane now used for both batch and streaming evaluations with preset voices.
+- `voxtream_realtime` / `voxtream2_realtime` remain additive experimental realtime clone lanes.
+- `chatterbox` remains compatibility batch fallback.

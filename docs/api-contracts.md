@@ -13,8 +13,21 @@ Public routes are exposed by the gateway:
 - `POST /v1/tts/synthesize`
 - `POST /v1/tts/stream/start`
 - `WS /v1/tts/stream/{session_id}`
+- `GET /v1/tts/studio/overview`
+- `GET /v1/tts/studio/voices`
+- `POST /v1/tts/studio/voices`
+- `POST /v1/tts/studio/voices/import`
+- `GET /v1/tts/studio/providers`
+- `GET /v1/tts/studio/providers/{provider}/models`
+- `GET /v1/tts/studio/routing`
+- `POST /v1/tts/studio/routing`
+- `POST /v1/tts/studio/routes/{route_name}/warmup`
 - `GET /v1/sessions`
 - `GET /v1/sessions/{session_id}`
 - `POST /v1/sessions/{session_id}/end`
 
 The request and response shapes follow the spec prompt and are implemented as Pydantic models in gateway and worker services.
+
+Current base URLs:
+- HTTP: `https://asr.aetherpro.us/api`
+- WS: `wss://asr.aetherpro.us`
