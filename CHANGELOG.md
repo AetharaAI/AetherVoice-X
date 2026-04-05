@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-05
+
+- Hardened frontend Vite dev-serving behavior for operator-facing hosts:
+  - added `server.fs.deny` rules in `services/frontend/vite.config.ts` to block direct serving of non-source repo files (`Dockerfile`, compose files, lock/config files)
+  - disabled Vite HMR fullscreen overlay (`server.hmr.overlay=false`) so a bad module request no longer blocks the console UI
+- Verified runtime behavior after change:
+  - requests to `/Dockerfile` and absolute `@fs` Dockerfile paths now return `403`
+  - previous `vite:import-analysis` parse-failure overlay no longer appears
+
 ## 2026-03-30
 
 - Verified `voxtral_tts` realtime lane runtime truth in `TTS Live`:

@@ -14,6 +14,20 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.FRONTEND_PORT || 3000),
       allowedHosts: allowedHosts.length ? allowedHosts : true,
+      fs: {
+        deny: [
+          "**/Dockerfile",
+          "**/docker-compose*.yml",
+          "**/package-lock.json",
+          "**/tsconfig*.json",
+          "**/vite.config.*",
+        ],
+      },
+      hmr: {
+        // This console is exposed on public hostnames; avoid shipping blocking
+        // error overlays to operators when a non-source file is accidentally requested.
+        overlay: false,
+      },
       proxy: {
         "/api": proxyTarget,
         "/v1": proxyTarget,

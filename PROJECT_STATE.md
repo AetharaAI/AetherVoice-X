@@ -1,5 +1,14 @@
 # Project State
 
+## 2026-04-05 Frontend Dev-Server Guardrail Truth
+
+- The frontend Vite server now explicitly denies direct access to repo build/config files (`Dockerfile`, compose files, lock/config files) during dev serving.
+- This prevents Vite from trying to parse non-source files as JS modules when an absolute filesystem request leaks into the browser session.
+- The frontend Vite HMR overlay is now disabled to prevent full-screen operator disruption on public-facing console hosts.
+- Runtime proof on local Vite run:
+  - direct requests to `Dockerfile` and absolute `@fs` Dockerfile paths now return `403` instead of triggering import-analysis parse failures
+  - the console loads normally without the blocking parse-error overlay
+
 ## 2026-03-30 Voxtral Provider-Lane Truth
 
 - `voxtral_tts` is now runtime-verified as a working external provider lane in `TTS Live`:
