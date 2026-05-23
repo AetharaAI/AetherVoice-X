@@ -16,8 +16,10 @@ from .dependencies import get_asr_client, get_tts_client
 from .logging import logger
 from .middleware.metrics import MetricsMiddleware
 from .middleware.request_id import RequestIDMiddleware
-from .routers import asr, health, metrics, models, sessions, studio, tts, voice
+from .routers import asr, health, metrics, models, scriber, sessions, studio, tts, voice
+from .services.platform_usage_service import PlatformUsageService
 from .services.quota_service import QuotaService
+from .services.scriber_service import ScriberService
 from .services.session_service import SessionService
 
 settings = get_settings()
@@ -51,7 +53,10 @@ async def lifespan(app: FastAPI):
     app.state.asr_client = ASRClient(settings.gateway_asr_base_url)
     app.state.tts_client = TTSClient(settings.gateway_tts_base_url)
     app.state.quota_service = QuotaService()
+    app.state.platform_usage_service = PlatformUsageService(settings)
     app.state.session_service = SessionService(db, redis)
+    app.state.scriber_service = ScriberService(db, settings)
+    await app.state.scriber_service.ensure_schema()
     logger.info("gateway_started")
     try:
         yield
@@ -77,6 +82,7 @@ app.include_router(models.router)
 app.include_router(asr.router)
 app.include_router(tts.router)
 app.include_router(voice.router)
+app.include_router(scriber.router)
 app.include_router(studio.router)
 app.include_router(sessions.router)
 app.include_router(metrics.router)
@@ -85,6 +91,7 @@ app.include_router(models.router, prefix="/api", include_in_schema=False)
 app.include_router(asr.router, prefix="/api", include_in_schema=False)
 app.include_router(tts.router, prefix="/api", include_in_schema=False)
 app.include_router(voice.router, prefix="/api", include_in_schema=False)
+app.include_router(scriber.router, prefix="/api", include_in_schema=False)
 app.include_router(studio.router, prefix="/api", include_in_schema=False)
 app.include_router(sessions.router, prefix="/api", include_in_schema=False)
 app.include_router(metrics.router, prefix="/api", include_in_schema=False)

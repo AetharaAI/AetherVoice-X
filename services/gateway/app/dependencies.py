@@ -11,6 +11,8 @@ from aether_common.storage import StorageManager
 from .clients.asr_client import ASRClient
 from .clients.tts_client import TTSClient
 from .services.quota_service import QuotaService
+from .services.platform_usage_service import PlatformUsageService
+from .services.scriber_service import ScriberService
 from .services.session_service import SessionService
 
 
@@ -44,6 +46,14 @@ def get_quota_service(request: Request) -> QuotaService:
 
 def get_session_service(request: Request) -> SessionService:
     return request.app.state.session_service
+
+
+def get_platform_usage_service(request: Request) -> PlatformUsageService:
+    return request.app.state.platform_usage_service
+
+
+def get_scriber_service(request: Request) -> ScriberService:
+    return request.app.state.scriber_service
 
 
 async def get_auth_context(

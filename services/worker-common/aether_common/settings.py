@@ -17,6 +17,28 @@ class Settings(BaseSettings):
 
     jwt_secret: str = Field(default="change_me", validation_alias=AliasChoices("JWT_SECRET"))
     api_key_header: str = Field(default="X-API-Key", validation_alias=AliasChoices("API_KEY_HEADER"))
+    platform_internal_secret: str | None = Field(default=None, validation_alias=AliasChoices("PLATFORM_INTERNAL_SECRET"))
+    platform_key_validation_url: str | None = Field(default=None, validation_alias=AliasChoices("PLATFORM_KEY_VALIDATION_URL"))
+    platform_usage_report_url: str | None = Field(default=None, validation_alias=AliasChoices("PLATFORM_USAGE_REPORT_URL"))
+    platform_internal_timeout_seconds: float = Field(default=10.0, validation_alias=AliasChoices("PLATFORM_INTERNAL_TIMEOUT_SECONDS"))
+    scriber_free_minutes: int = Field(default=30, validation_alias=AliasChoices("SCRIBER_FREE_MINUTES"))
+    scriber_checkout_success_url: str = Field(
+        default="https://scriber.aetherpro.us/checkout-success",
+        validation_alias=AliasChoices("SCRIBER_CHECKOUT_SUCCESS_URL"),
+    )
+    scriber_checkout_cancel_url: str = Field(
+        default="https://scriber.aetherpro.us/#pricing",
+        validation_alias=AliasChoices("SCRIBER_CHECKOUT_CANCEL_URL"),
+    )
+    scriber_stripe_secret_key: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_STRIPE_SECRET_KEY"))
+    scriber_stripe_webhook_secret: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_STRIPE_WEBHOOK_SECRET"))
+    scriber_founder_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_FOUNDER_PRICE_ID"))
+    scriber_pro_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_PRO_PRICE_ID"))
+    scriber_studio_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_STUDIO_PRICE_ID"))
+    scriber_session_token_ttl_seconds: int = Field(
+        default=86400,
+        validation_alias=AliasChoices("SCRIBER_SESSION_TOKEN_TTL_SECONDS"),
+    )
 
     postgres_url: str = Field(default="postgresql://voice:voice@localhost:5432/aether_voice", validation_alias=AliasChoices("POSTGRES_URL"))
     redis_url: str = Field(default="redis://localhost:6379/0", validation_alias=AliasChoices("REDIS_URL"))

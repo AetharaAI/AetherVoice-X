@@ -1,5 +1,43 @@
 # Project State
 
+## 2026-05-23 Scriber hosted billing seam
+
+- Voice-X now contains the first install-based Scriber commercialization path:
+  - anonymous install bootstrap
+  - free-minute entitlement snapshots
+  - Stripe Checkout session creation
+  - webhook-driven entitlement activation
+  - hosted ASR gating before stream bootstrap
+- Current implementation direction:
+  - the public Linux installer remains downloadable
+  - hosted usage, not the installer, is the protected asset
+  - Scriber should unlock automatically after payment via polling instead of manual API-key entry
+- Verification status from this workstation:
+  - Python modules compile cleanly
+  - full live Stripe + gateway + desktop end-to-end validation is still pending env wiring and deployment on the hosted node
+- Deployment follow-up still required:
+  - live Stripe secret + webhook secret
+  - live price IDs in gateway env
+  - webhook route exposed on the hosted gateway
+  - end-to-end checkout and cancellation verification
+
+## 2026-05-19 Platform API key monetization seam
+
+- Voice gateway auth now has a first-class Platform validation seam for customer API keys:
+  - new env-driven internal validation path can call `platform.aetherpro.us/api/internal/keys/validate`
+  - successful platform validation now uses per-key scopes returned by Platform instead of Voice-X hardcoding broad access
+  - legacy local `api_keys` table lookup remains as a compatibility fallback for older/internal keys
+- Voice gateway usage metering now has a first-class Platform reporting seam:
+  - successful ASR, TTS, and voice-turn requests can report usage to `platform.aetherpro.us/api/internal/usage/report`
+  - this gives Platform the data it needs for future billing, quotas, and customer usage visibility without moving inference into the control plane
+- `POST /v1/voice/turn` now requires `voice:turn` scope instead of piggybacking on `voice:tts`
+- Deployment status:
+  - code path implemented locally in this repo
+  - not yet verified against the live Platform app or deployed Voice-X node from this workstation
+  - production cutover still requires env wiring and end-to-end validation across both live services
+- New downstream handoff doc added:
+  - [VOICE_SUBSTRATE_PLATFORM_KEY_INTEGRATION_2026-05-19.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICE_SUBSTRATE_PLATFORM_KEY_INTEGRATION_2026-05-19.md)
+
 ## 2026-04-05 Frontend Dev-Server Guardrail Truth
 
 - The frontend Vite server now explicitly denies direct access to repo build/config files (`Dockerfile`, compose files, lock/config files) during dev serving.

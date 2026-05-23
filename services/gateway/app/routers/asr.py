@@ -11,7 +11,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from ..clients.asr_client import ASRClient, ASRUpstreamError
 from ..logging import logger
 from ..config import get_settings
-from ..dependencies import get_asr_client, get_auth_context, get_quota_service, get_session_service
+from ..dependencies import get_asr_client, get_auth_context, get_platform_usage_service, get_quota_service, get_scriber_service, get_session_service
 from ..schemas.asr import (
     ASRAnalyzeRequest,
     ASRAnalyzeResponse,
@@ -23,7 +23,9 @@ from ..schemas.asr import (
     ASRTranscribeResponse,
 )
 from ..services.quota_service import QuotaService
+from ..services.platform_usage_service import PlatformUsageService
 from ..services.router_policy import choose_asr_model
+from ..services.scriber_service import ScriberService
 from ..services.session_service import SessionService
 from ..utils.audio import read_upload
 from ..utils.ids import prefixed_id
@@ -61,6 +63,7 @@ async def transcribe(
     auth: AuthContext = Depends(get_auth_context),
     quota_service: QuotaService = Depends(get_quota_service),
     asr_client: ASRClient = Depends(get_asr_client),
+    platform_usage_service: PlatformUsageService = Depends(get_platform_usage_service),
     session_service: SessionService = Depends(get_session_service),
 ) -> ASRTranscribeResponse:
     ensure_scopes(auth, {"voice:asr"})
@@ -126,6 +129,23 @@ async def transcribe(
         result["text"],
         result["segments"],
     )
+    await platform_usage_service.report(
+        auth,
+        service="ASR",
+        metric="ASR_REQUESTS",
+        quantity=1,
+        request_id=request_id,
+        metadata={"route": "/v1/asr/transcribe", "model_used": result["model_used"]},
+    )
+    if result.get("duration_ms"):
+        await platform_usage_service.report(
+            auth,
+            service="ASR",
+            metric="ASR_AUDIO_SECONDS",
+            quantity=max(result["duration_ms"] / 1000, 0),
+            request_id=request_id,
+            metadata={"route": "/v1/asr/transcribe", "model_used": result["model_used"]},
+        )
     return ASRTranscribeResponse.model_validate(result)
 
 
@@ -136,6 +156,8 @@ async def start_stream(
     auth: AuthContext = Depends(get_auth_context),
     quota_service: QuotaService = Depends(get_quota_service),
     asr_client: ASRClient = Depends(get_asr_client),
+    platform_usage_service: PlatformUsageService = Depends(get_platform_usage_service),
+    scriber_service: ScriberService = Depends(get_scriber_service),
     session_service: SessionService = Depends(get_session_service),
 ) -> ASRStreamStartResponse:
     ensure_scopes(auth, {"voice:asr"})
@@ -149,6 +171,13 @@ async def start_stream(
     extra = dict(metadata.get("extra") or {})
     extra["requested_model"] = payload.model
     extra["allow_stream_fallback"] = payload.model == "auto"
+    if auth.install_id:
+        snapshot = await scriber_service.get_snapshot(auth.install_id)
+        if not snapshot.can_transcribe:
+            raise HTTPException(status_code=402, detail="PAYWALL_REQUIRED")
+        extra["scriber_install_id"] = auth.install_id
+        extra["scriber_plan_slug"] = auth.plan_slug or snapshot.plan_slug or snapshot.entitlement_status
+        extra["scriber_free_seconds_remaining"] = snapshot.free_seconds_remaining
     metadata["extra"] = extra
     await session_service.create_session(session_id, auth.tenant_id, "asr_stream", payload.model, model_used, metadata)
     internal_payload = payload.model_dump()
@@ -158,6 +187,16 @@ async def start_stream(
         result = await asr_client.start_stream(internal_payload, request_id=request_id, session_id=session_id, tenant_id=auth.tenant_id)
     except ASRUpstreamError as exc:
         raise HTTPException(status_code=exc.status_code if 400 <= exc.status_code < 500 else 503, detail=exc.detail) from exc
+    await platform_usage_service.report(
+        auth,
+        service="ASR",
+        metric="ASR_REQUESTS",
+        quantity=1,
+        request_id=request_id,
+        metadata={"route": "/v1/asr/stream/start", "model_used": result.get("model_used", model_used), "streaming": True},
+    )
+    if auth.install_id:
+        await scriber_service.attach_install_to_session(session_id, auth.install_id)
     return ASRStreamStartResponse(
         session_id=session_id,
         ws_url=f"/api/v1/asr/stream/{session_id}",
@@ -191,13 +230,17 @@ async def stream_proxy(websocket: WebSocket, session_id: str) -> None:
             await asyncio.gather(client_to_upstream(), upstream_to_client())
     except WebSocketDisconnect:
         logger.info("gateway_stream_proxy_disconnected", extra={"session_id": session_id})
-        return
     except Exception as exc:
         logger.error(
             "gateway_stream_proxy_failed",
             extra={"session_id": session_id, "upstream_url": upstream_url, "error": repr(exc)},
         )
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+    finally:
+        session_service = websocket.app.state.session_service
+        scriber_service = websocket.app.state.scriber_service
+        await session_service.end_session(session_id)
+        await scriber_service.finalize_session_usage(session_id)
 
 
 @router.post("/v1/asr/triage", response_model=ASRTriageResponse)

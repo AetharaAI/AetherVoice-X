@@ -79,6 +79,54 @@ CREATE TABLE IF NOT EXISTS tts_outputs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS scriber_installs (
+  install_id TEXT PRIMARY KEY,
+  first_seen_app_version TEXT,
+  last_seen_app_version TEXT,
+  platform TEXT NOT NULL DEFAULT 'linux',
+  email TEXT,
+  stripe_customer_id TEXT,
+  last_checkout_session_id TEXT,
+  free_seconds_granted INT NOT NULL DEFAULT 1800,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scriber_entitlements (
+  install_id TEXT PRIMARY KEY REFERENCES scriber_installs(install_id) ON DELETE CASCADE,
+  plan_slug TEXT NOT NULL,
+  status TEXT NOT NULL,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  stripe_checkout_session_id TEXT,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scriber_checkout_sessions (
+  checkout_session_id TEXT PRIMARY KEY,
+  install_id TEXT NOT NULL REFERENCES scriber_installs(install_id) ON DELETE CASCADE,
+  plan_slug TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  checkout_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS scriber_usage_ledger (
+  ledger_id TEXT PRIMARY KEY,
+  install_id TEXT NOT NULL REFERENCES scriber_installs(install_id) ON DELETE CASCADE,
+  session_id TEXT,
+  metric TEXT NOT NULL,
+  quantity_seconds INT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'gateway',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 INSERT INTO tenants (id, name)
 VALUES ('00000000-0000-0000-0000-000000000001', 'Local Demo Tenant')
 ON CONFLICT (id) DO NOTHING;

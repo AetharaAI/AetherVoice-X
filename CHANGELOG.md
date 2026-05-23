@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-05-23
+
+- Added the first Scriber install-based billing and entitlement seam to the gateway:
+  - anonymous install bootstrap endpoint
+  - entitlement polling endpoint
+  - Stripe Checkout session creation endpoint
+  - Stripe webhook endpoint
+  - gateway-side hosted ASR enforcement before stream bootstrap
+- Added Scriber-specific gateway env knobs for:
+  - free-minute allowance
+  - Stripe secret and webhook secret
+  - Founder / Pro / Studio price IDs
+  - checkout success / cancel URLs
+  - session-token TTL
+- Added persistence for Scriber hosted usage and entitlements:
+  - `scriber_installs`
+  - `scriber_entitlements`
+  - `scriber_checkout_sessions`
+  - `scriber_usage_ledger`
+- Added JWT auth-context support for signed `scriber_install` session tokens so the desktop app can connect without exposing operator keys.
+
+## 2026-05-19
+
+- Added a Platform-owned API key validation seam to Voice-X gateway auth:
+  - new env knobs: `PLATFORM_INTERNAL_SECRET`, `PLATFORM_KEY_VALIDATION_URL`, `PLATFORM_USAGE_REPORT_URL`, `PLATFORM_INTERNAL_TIMEOUT_SECONDS`
+  - gateway now prefers Platform key validation for customer API keys and uses returned per-key scopes
+  - legacy local Postgres `api_keys` lookup remains in place as a fallback for older/internal keys
+- Added initial Platform usage metering hooks in gateway routes:
+  - successful ASR, TTS, and voice-turn requests can now report usage back to Platform over the internal secreted HTTP seam
+  - this is the first code path that lets Platform become the commercial control plane while Voice-X remains the inference plane
+- Tightened voice-turn commercialization scope truth:
+  - `POST /v1/voice/turn` now enforces `voice:turn` instead of only `voice:tts`
+- Added unit coverage for the new auth seam in `tests/unit/test_platform_auth.py`
+- Added [VOICE_SUBSTRATE_PLATFORM_KEY_INTEGRATION_2026-05-19.md](/home/cory/Aether-Voice-Platform/Aether-Voice-X/VOICE_SUBSTRATE_PLATFORM_KEY_INTEGRATION_2026-05-19.md) as the downstream handoff doc for Scriber, VoiceOps, and future product integrations
+
 ## 2026-04-05
 
 - Hardened frontend Vite dev-serving behavior for operator-facing hosts:
