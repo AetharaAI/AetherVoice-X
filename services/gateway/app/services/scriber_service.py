@@ -234,14 +234,17 @@ class ScriberService:
         return self._passport_jwks_client
 
     def _decode_passport_token(self, token: str) -> dict[str, Any]:
-        signing_key = self._get_passport_jwks_client().get_signing_key_from_jwt(token)
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256", "RS384", "RS512"],
-            issuer=self.settings.scriber_passport_issuer,
-            options={"verify_aud": False},
-        )
+        try:
+            signing_key = self._get_passport_jwks_client().get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "RS384", "RS512"],
+                issuer=self.settings.scriber_passport_issuer,
+                options={"verify_aud": False},
+            )
+        except jwt.PyJWTError as exc:
+            raise ValueError(f"Passport token validation failed: {exc}") from exc
         audience = payload.get("aud")
         audience_values = audience if isinstance(audience, list) else [audience]
         authorized_party = payload.get("azp")

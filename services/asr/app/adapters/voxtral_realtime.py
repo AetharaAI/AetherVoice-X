@@ -45,6 +45,14 @@ def _normalize_transcript_text(text: str) -> str:
     return normalized.strip()
 
 
+def _extract_transcript_fragment(payload: dict) -> str:
+    for key in ("delta", "text", "transcript", "partial", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 class VoxtralRealtimeAdapter(BaseASRAdapter):
     name = "voxtral_realtime"
     supports_streaming = True
@@ -200,11 +208,24 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
             async for message in websocket:
                 payload = json.loads(message)
                 message_type = payload.get("type")
-                if message_type == "transcription.delta":
-                    delta = str(payload.get("delta", "")).strip()
+                if message_type in {
+                    "transcription.delta",
+                    "response.audio_transcript.delta",
+                    "response.output_text.delta",
+                }:
+                    delta = _extract_transcript_fragment(payload)
                     if not delta:
                         continue
                     state["partial_text"] = _normalize_transcript_text(f"{state['partial_text']} {delta}")
+                    logger.info(
+                        "voxtral_upstream_delta_received",
+                        extra={
+                            "session_id": session_id,
+                            "event_type": message_type,
+                            "delta_chars": len(delta),
+                            "partial_chars": len(state["partial_text"]),
+                        },
+                    )
                     await queue.put(
                         {
                             "type": "partial_transcript",
@@ -216,9 +237,24 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                             "end_ms": state["buffered_ms"],
                         }
                     )
-                elif message_type == "transcription.done":
+                elif message_type in {
+                    "transcription.done",
+                    "response.audio_transcript.done",
+                    "response.completed",
+                }:
+                    final_text = _extract_transcript_fragment(payload)
+                    if final_text and not payload.get("text"):
+                        payload = {**payload, "text": final_text}
                     state["final_payload"] = payload
                     state["done"].set()
+                    logger.info(
+                        "voxtral_upstream_done_received",
+                        extra={
+                            "session_id": session_id,
+                            "event_type": message_type,
+                            "final_text_chars": len(str(payload.get("text", "") or "")),
+                        },
+                    )
                     await queue.put({"type": "upstream_done", "session_id": session_id})
                 elif message_type == "error":
                     state["error"] = payload
@@ -227,7 +263,11 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 else:
                     logger.info(
                         "voxtral_upstream_event",
-                        extra={"session_id": session_id, "event_type": message_type},
+                        extra={
+                            "session_id": session_id,
+                            "event_type": message_type,
+                            "payload_keys": sorted(payload.keys()),
+                        },
                     )
         except Exception as exc:
             state["error"] = {"type": "error", "error": str(exc)}
@@ -331,15 +371,15 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         if state["buffered_ms"] - state["last_partial_ms"] >= self.partial_window_ms:
             await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit"}))
             state["last_partial_ms"] = state["buffered_ms"]
-        logger.info(
-            "voxtral_stream_partial_window_ready",
-            extra={
-                "session_id": session_id,
-                "seq": frame.seq,
-                "buffered_ms": state["buffered_ms"],
-                "partial_window_ms": self.partial_window_ms,
-            },
-        )
+            logger.info(
+                "voxtral_stream_partial_window_ready",
+                extra={
+                    "session_id": session_id,
+                    "seq": frame.seq,
+                    "buffered_ms": state["buffered_ms"],
+                    "partial_window_ms": self.partial_window_ms,
+                },
+            )
         events: list[dict] = []
         while True:
             try:
@@ -350,6 +390,16 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 events.append(event)
             elif event["type"] == "upstream_error":
                 raise RuntimeError(f"Voxtral realtime upstream error: {event['error']}")
+        if events:
+            logger.info(
+                "voxtral_stream_events_buffered",
+                extra={
+                    "session_id": session_id,
+                    "seq": frame.seq,
+                    "events_count": len(events),
+                    "partial_chars": len(state["partial_text"]),
+                },
+            )
         return events
 
     async def end_stream(self, session_id: str) -> ASRResult:
