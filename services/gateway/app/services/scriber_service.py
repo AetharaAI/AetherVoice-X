@@ -43,10 +43,19 @@ class EntitlementSnapshot:
         }
 
 
+@dataclass
+class PassportIdentity:
+    subject: str
+    email: str | None
+    preferred_username: str | None
+    roles: list[str]
+
+
 class ScriberService:
     def __init__(self, db: PostgresPool, settings: Settings) -> None:
         self.db = db
         self.settings = settings
+        self._passport_jwks_client: jwt.PyJWKClient | None = None
         if settings.scriber_stripe_secret_key:
             stripe.api_key = settings.scriber_stripe_secret_key
 
@@ -213,6 +222,79 @@ class ScriberService:
             can_transcribe=False,
             checkout_pending=pending_checkout is not None,
         )
+
+    def _get_passport_jwks_client(self) -> jwt.PyJWKClient:
+        if self._passport_jwks_client is None:
+            jwks_url = f"{self.settings.scriber_passport_issuer.rstrip('/')}/protocol/openid-connect/certs"
+            self._passport_jwks_client = jwt.PyJWKClient(jwks_url)
+        return self._passport_jwks_client
+
+    def _decode_passport_token(self, token: str) -> dict[str, Any]:
+        signing_key = self._get_passport_jwks_client().get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256", "RS384", "RS512"],
+            issuer=self.settings.scriber_passport_issuer,
+            options={"verify_aud": False},
+        )
+        audience = payload.get("aud")
+        audience_values = audience if isinstance(audience, list) else [audience]
+        authorized_party = payload.get("azp")
+        if self.settings.scriber_passport_client_id not in audience_values and authorized_party != self.settings.scriber_passport_client_id:
+            raise ValueError("Passport token audience does not match scriber-desktop.")
+        return payload
+
+    def _authenticate_passport_identity(self, access_token: str, id_token: str) -> PassportIdentity:
+        access_payload = self._decode_passport_token(access_token)
+        id_payload = self._decode_passport_token(id_token)
+        subject = str(id_payload.get("sub") or access_payload.get("sub") or "").strip()
+        if not subject:
+            raise ValueError("Passport token is missing sub.")
+        roles = access_payload.get("realm_access", {}).get("roles") or id_payload.get("realm_access", {}).get("roles") or []
+        return PassportIdentity(
+            subject=subject,
+            email=(id_payload.get("email") or access_payload.get("email")),
+            preferred_username=(id_payload.get("preferred_username") or access_payload.get("preferred_username")),
+            roles=[str(role) for role in roles if str(role).strip()],
+        )
+
+    def _snapshot_for_identity(self, snapshot: EntitlementSnapshot, identity: PassportIdentity) -> EntitlementSnapshot:
+        if self.settings.scriber_passport_admin_role in identity.roles:
+            return EntitlementSnapshot(
+                install_id=snapshot.install_id,
+                entitlement_status="active",
+                plan_slug=snapshot.plan_slug,
+                free_seconds_granted=snapshot.free_seconds_granted,
+                free_seconds_used=snapshot.free_seconds_used,
+                free_seconds_remaining=snapshot.free_seconds_remaining,
+                can_transcribe=True,
+                checkout_pending=snapshot.checkout_pending,
+            )
+        return snapshot
+
+    async def create_auth_session(
+        self,
+        install_id: str,
+        *,
+        access_token: str,
+        id_token: str,
+        app_version: str | None,
+        platform: str | None,
+    ) -> dict[str, Any]:
+        identity = self._authenticate_passport_identity(access_token, id_token)
+        await self.touch_install(install_id, app_version=app_version, platform=platform)
+        snapshot = self._snapshot_for_identity(await self.get_snapshot(install_id), identity)
+        session_token = self.issue_session_token(snapshot)
+        return {
+            **snapshot.to_payload(session_token),
+            "user": {
+                "subject": identity.subject,
+                "email": identity.email,
+                "preferred_username": identity.preferred_username,
+                "roles": identity.roles,
+            },
+        }
 
     def issue_session_token(self, snapshot: EntitlementSnapshot) -> str | None:
         if not snapshot.can_transcribe:

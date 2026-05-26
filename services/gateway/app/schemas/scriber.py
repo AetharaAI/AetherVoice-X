@@ -38,3 +38,21 @@ class ScriberCheckoutResponse(BaseModel):
     checkout_session_id: str
     plan_slug: PlanSlug
 
+
+class ScriberAuthSessionRequest(BaseModel):
+    install_id: str = Field(min_length=8, max_length=128)
+    access_token: str = Field(min_length=16)
+    id_token: str = Field(min_length=16)
+    app_version: str | None = Field(default=None, max_length=64)
+    platform: str | None = Field(default="linux", max_length=64)
+
+
+class ScriberAuthUserResponse(BaseModel):
+    subject: str
+    email: str | None = None
+    preferred_username: str | None = None
+    roles: list[str] = Field(default_factory=list)
+
+
+class ScriberAuthSessionResponse(ScriberEntitlementResponse):
+    user: ScriberAuthUserResponse

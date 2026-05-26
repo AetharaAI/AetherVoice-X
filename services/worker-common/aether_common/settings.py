@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     scriber_founder_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_FOUNDER_PRICE_ID"))
     scriber_pro_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_PRO_PRICE_ID"))
     scriber_studio_price_id: str | None = Field(default=None, validation_alias=AliasChoices("SCRIBER_STUDIO_PRICE_ID"))
+    scriber_passport_issuer: str = Field(
+        default="https://passport.aetherpro.us/realms/syndicate",
+        validation_alias=AliasChoices("SCRIBER_PASSPORT_ISSUER"),
+    )
+    scriber_passport_client_id: str = Field(
+        default="scriber-desktop",
+        validation_alias=AliasChoices("SCRIBER_PASSPORT_CLIENT_ID"),
+    )
+    scriber_passport_admin_role: str = Field(
+        default="scriber_admin",
+        validation_alias=AliasChoices("SCRIBER_PASSPORT_ADMIN_ROLE"),
+    )
     scriber_session_token_ttl_seconds: int = Field(
         default=86400,
         validation_alias=AliasChoices("SCRIBER_SESSION_TOKEN_TTL_SECONDS"),

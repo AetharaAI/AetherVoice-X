@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from ..dependencies import get_scriber_service
 from ..schemas.scriber import (
+    ScriberAuthSessionRequest,
+    ScriberAuthSessionResponse,
     ScriberBootstrapRequest,
     ScriberCheckoutRequest,
     ScriberCheckoutResponse,
@@ -56,6 +58,24 @@ async def scriber_checkout(
         **result,
         "plan_slug": payload.plan_slug,
     })
+
+
+@router.post("/v1/scriber/auth/session", response_model=ScriberAuthSessionResponse)
+async def scriber_auth_session(
+    payload: ScriberAuthSessionRequest,
+    scriber_service: ScriberService = Depends(get_scriber_service),
+) -> ScriberAuthSessionResponse:
+    try:
+        result = await scriber_service.create_auth_session(
+            payload.install_id,
+            access_token=payload.access_token,
+            id_token=payload.id_token,
+            app_version=payload.app_version,
+            platform=payload.platform,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return ScriberAuthSessionResponse.model_validate(result)
 
 
 @router.post("/v1/stripe/webhook")
