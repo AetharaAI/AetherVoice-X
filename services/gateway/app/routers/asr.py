@@ -173,7 +173,9 @@ async def start_stream(
     extra["allow_stream_fallback"] = payload.model == "auto"
     if auth.install_id:
         snapshot = await scriber_service.get_snapshot(auth.install_id)
-        if not snapshot.can_transcribe:
+        if auth.scriber_admin_override:
+            extra["scriber_admin_override"] = True
+        elif not snapshot.can_transcribe:
             raise HTTPException(status_code=402, detail="PAYWALL_REQUIRED")
         extra["scriber_install_id"] = auth.install_id
         extra["scriber_plan_slug"] = auth.plan_slug or snapshot.plan_slug or snapshot.entitlement_status

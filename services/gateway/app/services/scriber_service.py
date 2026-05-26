@@ -28,6 +28,7 @@ class EntitlementSnapshot:
     free_seconds_remaining: int
     can_transcribe: bool
     checkout_pending: bool
+    admin_override: bool = False
 
     def to_payload(self, session_token: str | None = None) -> dict[str, Any]:
         return {
@@ -196,6 +197,7 @@ class ScriberService:
                 free_seconds_remaining=free_seconds_remaining,
                 can_transcribe=True,
                 checkout_pending=pending_checkout is not None,
+                admin_override=False,
             )
 
         if free_seconds_remaining > 0:
@@ -208,6 +210,7 @@ class ScriberService:
                 free_seconds_remaining=free_seconds_remaining,
                 can_transcribe=True,
                 checkout_pending=pending_checkout is not None,
+                admin_override=False,
             )
 
         status = str(entitlement["status"]) if entitlement else "paywalled"
@@ -221,6 +224,7 @@ class ScriberService:
             free_seconds_remaining=0,
             can_transcribe=False,
             checkout_pending=pending_checkout is not None,
+            admin_override=False,
         )
 
     def _get_passport_jwks_client(self) -> jwt.PyJWKClient:
@@ -270,6 +274,7 @@ class ScriberService:
                 free_seconds_remaining=snapshot.free_seconds_remaining,
                 can_transcribe=True,
                 checkout_pending=snapshot.checkout_pending,
+                admin_override=True,
             )
         return snapshot
 
@@ -305,7 +310,8 @@ class ScriberService:
             "tenant_id": self.settings.default_tenant_id,
             "auth_type": "scriber_install",
             "install_id": snapshot.install_id,
-            "plan_slug": snapshot.plan_slug or "trial",
+            "plan_slug": snapshot.plan_slug or ("admin" if snapshot.admin_override else "trial"),
+            "scriber_admin_override": snapshot.admin_override,
             "scopes": ["voice:asr"],
             "exp": expires_at,
         }

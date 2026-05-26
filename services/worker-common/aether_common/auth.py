@@ -23,6 +23,7 @@ class AuthContext:
     user_id: str | None = None
     plan_slug: str | None = None
     install_id: str | None = None
+    scriber_admin_override: bool = False
 
 
 def hash_api_key(api_key: str) -> str:
@@ -124,6 +125,7 @@ async def resolve_auth_context(
                 auth_type="scriber_install",
                 plan_slug=payload.get("plan_slug"),
                 install_id=payload.get("install_id"),
+                scriber_admin_override=bool(payload.get("scriber_admin_override", False)),
             )
         return AuthContext(
             tenant_id=str(payload.get("tenant_id", settings.default_tenant_id)),
