@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 
 from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 
@@ -44,6 +45,7 @@ async def start_stream(
 async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
     logger.info("stream_websocket_accepted", extra={"session_id": session_id, "route": "/internal/stream"})
+    finished = False
     try:
         while True:
             message = await websocket.receive_text()
@@ -54,6 +56,7 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                     await websocket.send_json(event)
             elif payload["type"] == "end_stream":
                 result = await websocket.app.state.streaming_service.finish(session_id)
+                finished = True
                 await websocket.send_json(
                     {
                         "type": "final_transcript",
@@ -66,10 +69,15 @@ async def websocket_stream(websocket: WebSocket, session_id: str) -> None:
                 break
     except WebSocketDisconnect:
         logger.info("stream_websocket_disconnected", extra={"session_id": session_id, "route": "/internal/stream"})
-        return
     except Exception as exc:
+        # Log and clean up instead of re-raising: a dead socket is not a server
+        # fault, and the finally block guarantees the session is torn down so the
+        # upstream realtime slot is never leaked.
         logger.error(
             "stream_websocket_failed",
             extra={"session_id": session_id, "route": "/internal/stream", "error": repr(exc)},
         )
-        raise
+    finally:
+        if not finished:
+            with suppress(Exception):
+                await websocket.app.state.streaming_service.abort(session_id)

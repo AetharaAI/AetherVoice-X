@@ -69,6 +69,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         api_key: str | None = None,
         partial_window_ms: int = 480,
         clear_after_commit: bool = True,
+        finish_timeout_seconds: float = 15.0,
         timeout_seconds: float = 90.0,
     ) -> None:
         self.base_url = (base_url or "").rstrip("/")
@@ -77,6 +78,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         self.api_key = api_key.strip() if api_key and api_key.strip() else None
         self.partial_window_ms = partial_window_ms
         self.clear_after_commit = clear_after_commit
+        self.finish_timeout_seconds = finish_timeout_seconds
         self.ready = bool(self.base_url or self.ws_url)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.base_url else None
         self._sessions: dict[str, dict] = {}
@@ -435,15 +437,34 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "model_used": self.name,
             },
         )
-        await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit", "final": True}))
-        await asyncio.wait_for(state["done"].wait(), timeout=15.0)
-        receiver_task = state.get("receiver_task")
-        if receiver_task is not None:
-            receiver_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await receiver_task
-        await state["upstream"].close()
-        if state["error"] is not None:
+        timed_out = False
+        try:
+            with suppress(Exception):
+                await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit", "final": True}))
+            try:
+                await asyncio.wait_for(state["done"].wait(), timeout=self.finish_timeout_seconds)
+            except asyncio.TimeoutError:
+                # Upstream never delivered its terminal event in time (e.g. busy
+                # under concurrent load). Don't fail the turn: fall back to the
+                # transcript we already accumulated and tear down cleanly.
+                timed_out = True
+                logger.warning(
+                    "voxtral_stream_finish_timeout",
+                    extra={
+                        "session_id": session_id,
+                        "timeout_seconds": self.finish_timeout_seconds,
+                        "partial_chars": len(state["partial_text"]),
+                    },
+                )
+        finally:
+            receiver_task = state.get("receiver_task")
+            if receiver_task is not None:
+                receiver_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await receiver_task
+            with suppress(Exception):
+                await state["upstream"].close()
+        if state["error"] is not None and not timed_out:
             raise RuntimeError(f"Voxtral realtime upstream error: {state['error']}")
         payload = state["final_payload"] or {}
         text = _normalize_transcript_text(str(payload.get("text", "")).strip() or state["partial_text"])
@@ -468,4 +489,25 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
             else [],
             timings=TimingBreakdown(total_ms=state["buffered_ms"]),
             artifacts={"voxtral_realtime_final": json.dumps(payload)},
+        )
+
+    async def abort_stream(self, session_id: str) -> None:
+        # Idempotent teardown for abnormal disconnects: release the upstream
+        # realtime websocket and receiver task so the slot is freed instead of
+        # leaking. Safe to call when the session was already finished.
+        state = self._sessions.pop(session_id, None)
+        if state is None:
+            return
+        receiver_task = state.get("receiver_task")
+        if receiver_task is not None:
+            receiver_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await receiver_task
+        upstream = state.get("upstream")
+        if upstream is not None:
+            with suppress(Exception):
+                await upstream.close()
+        logger.info(
+            "voxtral_stream_aborted",
+            extra={"session_id": session_id, "buffered_ms": state.get("buffered_ms", 0)},
         )

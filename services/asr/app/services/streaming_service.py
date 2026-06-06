@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 
 from redis.asyncio import Redis
 
@@ -99,6 +100,35 @@ class StreamingService:
                 state["first_partial_recorded"] = True
                 voice_asr_stream_time_to_first_partial_ms.labels(service="asr").observe(now_ms() - state["started_at_ms"])
         return events
+
+    async def abort(self, session_id: str) -> None:
+        """Tear down a stream that ended abnormally (client disconnect or socket
+        error) without producing a final transcript. Idempotent: a no-op once a
+        session has already been finished or aborted. Releases the adapter's
+        upstream resources so the realtime slot is freed instead of leaking."""
+        state = self.sessions.pop(session_id, None)
+        if state is None:
+            return
+        adapter = state["adapter"]
+        abort_stream = getattr(adapter, "abort_stream", None)
+        if abort_stream is not None:
+            with suppress(Exception):
+                await abort_stream(session_id)
+        with suppress(Exception):
+            await self.redis.hset(
+                f"voice:session:{session_id}:meta",
+                mapping={"status": "aborted", "ended_at": str(now_ms())},
+            )
+        self.telemetry.session_ended()
+        logger.info(
+            "stream_aborted",
+            extra={
+                "session_id": session_id,
+                "route": "/internal/stream",
+                "tenant_id": state["request"].tenant_id,
+                "model_used": adapter.name,
+            },
+        )
 
     async def finish(self, session_id: str) -> ASRResult:
         state = self.sessions.pop(session_id)
