@@ -68,6 +68,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         model_name: str,
         api_key: str | None = None,
         partial_window_ms: int = 480,
+        clear_after_commit: bool = True,
         timeout_seconds: float = 90.0,
     ) -> None:
         self.base_url = (base_url or "").rstrip("/")
@@ -75,6 +76,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         self.model_name = model_name
         self.api_key = api_key.strip() if api_key and api_key.strip() else None
         self.partial_window_ms = partial_window_ms
+        self.clear_after_commit = clear_after_commit
         self.ready = bool(self.base_url or self.ws_url)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout_seconds) if self.base_url else None
         self._sessions: dict[str, dict] = {}
@@ -86,6 +88,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                 "voxtral_ws_url": self.ws_url or "unset",
                 "voxtral_model_name": self.model_name,
                 "voxtral_partial_window_ms": self.partial_window_ms,
+                "voxtral_clear_after_commit": self.clear_after_commit,
                 "voxtral_api_key_configured": bool(self.api_key),
             },
         )
@@ -216,6 +219,15 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                     delta = _extract_transcript_fragment(payload)
                     if not delta:
                         continue
+                    # Guard against an upstream re-emitting the same window text back
+                    # to back, which would otherwise snowball the running transcript.
+                    if delta == state.get("last_delta"):
+                        logger.info(
+                            "voxtral_upstream_delta_skipped_duplicate",
+                            extra={"session_id": session_id, "delta_chars": len(delta)},
+                        )
+                        continue
+                    state["last_delta"] = delta
                     state["partial_text"] = _normalize_transcript_text(f"{state['partial_text']} {delta}")
                     logger.info(
                         "voxtral_upstream_delta_received",
@@ -345,6 +357,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
             "last_partial_ms": 0,
             "last_seq": 0,
             "partial_text": "",
+            "last_delta": "",
             "events": asyncio.Queue(),
             "done": asyncio.Event(),
             "error": None,
@@ -370,6 +383,15 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
         )
         if state["buffered_ms"] - state["last_partial_ms"] >= self.partial_window_ms:
             await state["upstream"].send(json.dumps({"type": "input_audio_buffer.commit"}))
+            # Reset the upstream input buffer after every windowed commit. Without
+            # this, each commit re-commits the entire accumulated call audio, so the
+            # model re-transcribes from t=0 every window: O(n^2) GPU per call (which
+            # starves concurrent sessions) and overlapping/duplicated partials. The
+            # clear keeps each window carrying only newly-appended audio. clear is a
+            # no-op on an empty buffer upstream, so it is safe regardless of whether
+            # commit already drained the buffer on this build.
+            if self.clear_after_commit:
+                await state["upstream"].send(json.dumps({"type": "input_audio_buffer.clear"}))
             state["last_partial_ms"] = state["buffered_ms"]
             logger.info(
                 "voxtral_stream_partial_window_ready",
@@ -378,6 +400,7 @@ class VoxtralRealtimeAdapter(BaseASRAdapter):
                     "seq": frame.seq,
                     "buffered_ms": state["buffered_ms"],
                     "partial_window_ms": self.partial_window_ms,
+                    "cleared": self.clear_after_commit,
                 },
             )
         events: list[dict] = []

@@ -17,6 +17,7 @@ class ModelRegistry:
             model_name=settings.voxtral_realtime_model_name or settings.voxtral_model_id,
             api_key=settings.voxtral_api_key,
             partial_window_ms=settings.voxtral_stream_partial_window_ms,
+            clear_after_commit=settings.voxtral_stream_clear_after_commit,
             timeout_seconds=settings.voxtral_realtime_timeout_seconds,
         )
         self.adapters = {
